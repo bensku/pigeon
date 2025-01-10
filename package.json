@@ -1,5 +1,5 @@
 {
-  "name": "@bensku/pigeon",
+  "name": "@bensku/pigeon-base",
   "version": "0.0.1",
   "description": "IaC for whatever servers you have",
   "main": "src/index.ts",
@@ -8,5 +8,10 @@
   "devDependencies": {
     "prettier": "^3.4.2",
     "typescript": "^5.7.3"
+  },
+  "dependencies": {
+    "@pulumi/command": "^1.0.1",
+    "@pulumi/pulumi": "^3.145.0",
+    "@pulumi/random": "^4.16.8"
   }
 }
