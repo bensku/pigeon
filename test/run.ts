@@ -1,0 +1,22 @@
+import { LocalWorkspace } from '@pulumi/pulumi/automation';
+
+async function runTest(target: string) {
+  const app = await import(`./${target}`);
+  const stack = await LocalWorkspace.createOrSelectStack(
+    {
+      projectName: `pigeon-test`,
+      stackName: target,
+      program: app.pulumiProgram,
+    },
+    {
+      envVars: {
+        PULUMI_CONFIG_PASSPHRASE: 'test',
+      },
+    },
+  );
+
+  await stack.up({ onOutput: console.info });
+  await stack.destroy({ onOutput: console.info });
+}
+
+runTest(process.argv[2]);

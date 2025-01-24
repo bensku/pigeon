@@ -1,5 +1,6 @@
 import * as pulumi from '@pulumi/pulumi';
-import { local } from '@pulumi/command';
+import * as command from '@pulumi/command';
+import * as random from '@pulumi/random';
 
 export interface FlockArgs {
   /**
@@ -20,7 +21,7 @@ export class Network extends pulumi.ComponentResource {
   name: string;
   #certManagerBinary: string;
 
-  #epochs: [Epoch, Epoch];
+  #epochs: [CaCertificate, CaCertificate];
 
   constructor(
     name: string,
@@ -54,7 +55,11 @@ export class Network extends pulumi.ComponentResource {
     return this.#epochs[1];
   }
 
-  #createCaForEpoch(name: string, epoch: number, validity: number): Epoch {
+  #createCaForEpoch(
+    name: string,
+    epoch: number,
+    validity: number,
+  ): CaCertificate {
     const privateKey = certManagerCmd(this, `${name}-epoch-${epoch}-ca-key`, {
       mode: 'ca',
       target: 'key',
@@ -74,7 +79,7 @@ export class Network extends pulumi.ComponentResource {
   }
 }
 
-interface Epoch {
+interface CaCertificate {
   privateKey: pulumi.Output<string>;
   certificate: pulumi.Output<string>;
 }
@@ -105,8 +110,23 @@ export class Host extends pulumi.ComponentResource {
     this.name = name;
   }
 
-  #createHostCert(ca: Epoch, name: string) {
+  #createHostCert(ca: CaCertificate, name: string) {
     // TODO
+  }
+}
+
+interface EndpointArgs {}
+
+export class Endpoint extends pulumi.ComponentResource {
+  name: string;
+
+  constructor(
+    name: string,
+    args: EndpointArgs,
+    opts?: pulumi.ComponentResourceOptions,
+  ) {
+    super('pigeon:flock:Endpoint', name, {}, opts);
+    this.name = name;
   }
 }
 
@@ -136,7 +156,7 @@ function certManagerCmd(
   if (args.certConfig) {
     env.CERT_CONFIG = JSON.stringify(args.certConfig);
   }
-  const cmd = new local.Command(
+  const cmd = new command.local.Command(
     `${this.name}-${id}`,
     {
       create: CERT_MANAGER_BINARY,
