@@ -14,6 +14,7 @@ async function runTest(target: string) {
       },
     },
   );
+  //stack.workspace.removeStack(stack.name, { force: true });
 
   await stack.up({ onOutput: console.info });
   await stack.destroy({ onOutput: console.info });
