@@ -1,0 +1,37 @@
+# We need default pool to pull images, apparently
+default:
+  type: pool
+  path: /tmp/pigeon/libvirt-pool
+
+pigeonnnet:
+  type: network
+  name: pigeonnet
+  cidr: 10.0.15.0/24
+
+test1:
+  memory: 512
+  numcpus: 2
+  nets: 
+   - name: pigeonnnet
+  pool: default
+  image: ubuntu2404
+  reservedns: True
+  reservehost: True
+test2:
+  memory: 512
+  numcpus: 2
+  nets: 
+   - name: pigeonnnet
+  pool: default
+  image: ubuntu2404
+  reservedns: True
+  reservehost: True
+test3:
+  memory: 512
+  numcpus: 2
+  nets: 
+   - name: pigeonnnet
+  pool: default
+  image: ubuntu2404
+  reservedns: True
+  reservehost: True
