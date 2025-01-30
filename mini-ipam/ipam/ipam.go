@@ -130,10 +130,6 @@ func writeNetwork(networkID string, network *Network) error {
 		return err
 	}
 
-	if err := os.MkdirAll("data", 0755); err != nil {
-		return err
-	}
-
 	return os.WriteFile(networkPath(networkID), data, 0644)
 }
 
@@ -185,6 +181,11 @@ func isBroadcastIP(ip net.IP, ipnet *net.IPNet) bool {
 }
 
 func acquireNetworkLock(networkID string, exclusive bool) (*flock.Flock, error) {
+	// Lock is also placed in data directory, so it must exist!
+	if err := os.MkdirAll("data", 0755); err != nil {
+		return nil, err
+	}
+
 	lockFile := filepath.Join("data", networkID+".lock")
 	lock := flock.New(lockFile)
 	var err error

@@ -1,7 +1,7 @@
 # We need default pool to pull images, apparently
 default:
   type: pool
-  path: /tmp/pigeon/libvirt-pool
+  path: /var/pigeon/libvirt-pool
 
 pigeonnnet:
   type: network
