@@ -36,18 +36,14 @@ export class Network extends pulumi.ComponentResource {
     // The idea is that you can rotate certs by increasing epoch by one and deploying;
     // Pulumi will automatically update endpoints and destroy older CA resources
     // ... without network downtime, of course!
-    const caValidity = 7 * 24 * 60 * 60 * 1000; // 1 week
     this.#epochs = [
+      // FIXME this is broken, we can't patch caValidity of a CA from previous epoch!
+      // Use environment variables within commands to do the current data + EXPIRATION_TIME
       this.#createCaForEpoch(
         `${name} CA epoch ${args.epoch - 1}`,
         args.epoch - 1,
-        caValidity,
       ),
-      this.#createCaForEpoch(
-        `${name} CA epoch ${args.epoch}`,
-        args.epoch,
-        caValidity,
-      ),
+      this.#createCaForEpoch(`${name} CA epoch ${args.epoch}`, args.epoch),
     ];
   }
 
@@ -55,24 +51,19 @@ export class Network extends pulumi.ComponentResource {
     return this.#epochs[1];
   }
 
-  #createCaForEpoch(
-    name: string,
-    epoch: number,
-    validity: number,
-  ): CaCertificate {
+  #createCaForEpoch(name: string, epoch: number): CaCertificate {
     const privateKey = certManagerCmd(this, `${name}-epoch-${epoch}-ca-key`, {
       mode: 'ca',
       target: 'key',
     });
-    const now = Date.now();
     const certificate = certManagerCmd(this, `${name}-epoch-${epoch}-ca-cert`, {
       mode: 'ca',
       target: 'cert',
       caKey: privateKey,
       caConfig: {
         name: name,
-        validNotBefore: new Date(now - 5 * 60 * 1000).toISOString(),
-        validNotAfter: new Date(now + validity).toISOString(),
+        validNotBefore: new Date(0).toISOString(),
+        validNotAfter: '2500-01-01T00:00:00.000Z',
       },
     });
     return { privateKey, certificate };

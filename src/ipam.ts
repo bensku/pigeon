@@ -19,10 +19,10 @@ export class IpamHost extends pulumi.ComponentResource {
     this.#connection = args.host.connection;
 
     // Install mini-ipam on machine
-    const copy = new command.remote.CopyToRemote(
+    const copy = new host.FileUpload(
       `${name}-copy`,
       {
-        connection: this.#connection,
+        host: args.host,
         source: new pulumi.asset.FileAsset('mini-ipam/mini-ipam'),
         remotePath: '/opt/pigeon/mini-ipam',
       },
@@ -52,6 +52,7 @@ export class IpamHost extends pulumi.ComponentResource {
         connection: this.#connection,
         create: pulumi.interpolate`cd /etc/pigeon/ipam && /opt/pigeon/mini-ipam create-network "${networkId}" "${cidr}"`,
         delete: pulumi.interpolate`cd /etc/pigeon/ipam && /opt/pigeon/mini-ipam destroy-network "${networkId}"`,
+        addPreviousOutputInEnv: false,
       },
       { dependsOn: this, parent },
     );
@@ -69,6 +70,7 @@ export class IpamHost extends pulumi.ComponentResource {
         connection: this.#connection,
         create: pulumi.interpolate`cd /etc/pigeon/ipam && /opt/pigeon/mini-ipam allocate-address "${network.networkId}" "${id}"`,
         delete: pulumi.interpolate`cd /etc/pigeon/ipam && /opt/pigeon/mini-ipam free-address "${network.networkId}" "${id}" || true`,
+        addPreviousOutputInEnv: false,
       },
       { dependsOn: [this, network], parent },
     );

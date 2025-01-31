@@ -22,6 +22,7 @@ export class Package extends pulumi.ComponentResource {
         create: `apt-get -qq update && apt-get install -qq ${args.name}`,
         // TODO what if package already existed before create?
         delete: `apt-get remove -qq ${args.name}`,
+        addPreviousOutputInEnv: false,
       },
       { parent: this, dependsOn: args.host },
     );
