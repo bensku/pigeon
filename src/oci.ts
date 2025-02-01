@@ -22,13 +22,16 @@ export class Pod extends pulumi.ComponentResource {
     this.host = args.host;
     this.podName = pulumi.output(args.name);
 
+    // Ensure container runtime is installed before we proceed any further
+    const runtimeInstall = this.host.installPackage('podman');
+
     // Create pod network
     this.podNetName = pulumi.interpolate`${args.name}-pod.network`;
     new systemd.Service(
       `${name}-pod-net`,
       {
         host: args.host,
-        name: this.podNetName,
+        name: `${args.name}-pod`,
         serviceSuffix: '-network',
         fileSuffix: '.network',
         unitFile: new pulumi.asset.StringAsset(`[Unit]
@@ -43,7 +46,7 @@ WantedBy=multi-user.target default.target
         unitDir: '/etc/containers/systemd',
         transient: true,
       },
-      { parent: this, dependsOn: args.host },
+      { parent: this, dependsOn: [args.host, runtimeInstall] },
     );
   }
 }
@@ -54,6 +57,7 @@ export interface ContainerArgs {
   image: string;
   mounts?: [pulumi.Input<string> | Volume, string][];
   environment?: [pulumi.Input<string>, pulumi.Input<string | SecretRef>][];
+  ports?: [pulumi.Input<number>, pulumi.Input<number>][];
   entrypoint?: pulumi.Input<string>;
   command?: pulumi.Input<string>;
 }
@@ -96,6 +100,13 @@ export class Container extends pulumi.ComponentResource {
       ),
     );
 
+    const ports = pulumi.concat(
+      (args.ports ?? []).map(
+        ([hostPort, containerPort]) =>
+          pulumi.interpolate`PublishPort=${hostPort}:${containerPort}\n`,
+      ),
+    );
+
     const unit = pulumi.interpolate`[Unit]
 Description=Container ${args.name} in pod ${args.pod.podName}
 
@@ -106,6 +117,7 @@ Image=${args.image}
 Network=${args.pod.podNetName}
 ${mounts}
 ${env}
+${ports}
 ${args.entrypoint ? pulumi.interpolate`Entrypoint=${args.entrypoint}\n` : ''}
 ${args.command ? pulumi.interpolate`Exec=${args.command}\n` : ''}
 
@@ -125,7 +137,7 @@ WantedBy=multi-user.target default.target
         unitDir: '/etc/containers/systemd',
         transient: true,
       },
-      { parent: this },
+      { parent: this, dependsOn: args.pod },
     );
     this.serviceName = service.serviceName;
   }
@@ -167,7 +179,7 @@ WantedBy=multi-user.target default.target
         unitDir: '/etc/containers/systemd',
         transient: true,
       },
-      { parent: this },
+      { parent: this, dependsOn: args.pod },
     );
     this.serviceName = service.serviceName;
   }

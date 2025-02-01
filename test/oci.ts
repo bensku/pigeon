@@ -7,19 +7,10 @@ export async function pulumiProgram() {
   const host1 = new host.Host('host', {
     connection: CONNECTIONS[0],
   });
-  // Install Podman, we'll need it
-  const podman = new apt.Package('podman', {
+  const pod = new oci.Pod('pod', {
     host: host1,
-    name: 'podman',
+    name: 'test-pod',
   });
-  const pod = new oci.Pod(
-    'pod',
-    {
-      host: host1,
-      name: 'test-pod',
-    },
-    { dependsOn: podman },
-  );
   const volume = new oci.Volume('volume', {
     pod,
     name: 'test-volume',
@@ -27,10 +18,22 @@ export async function pulumiProgram() {
   const container = new oci.Container('container', {
     pod,
     name: 'test-container',
-    image: 'alpine',
+    image: 'docker.io/nginx',
     mounts: [[volume, '/test-volume']],
     environment: [['TEST_VAR', 'test_str']],
+    ports: [[8081, 80]],
   });
 
   return {};
+}
+
+export async function testInfra() {
+  // Test that our nginx container is running and working
+  await new Promise((resolve) => setTimeout(resolve, 3000));
+  const response = await fetch('http://test1:8081');
+  if (response.status !== 200) {
+    throw new Error(
+      `Expected 200 OK but got ${response.status} ${response.statusText}`,
+    );
+  }
 }

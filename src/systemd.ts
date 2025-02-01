@@ -38,7 +38,15 @@ export class Service extends pulumi.ComponentResource {
         `${name}-enable`,
         {
           connection: args.host.connection,
-          create: pulumi.interpolate`systemctl daemon-reload && systemctl enable --now ${this.serviceName}`,
+          create: pulumi.interpolate`systemctl daemon-reload && systemctl enable ${this.serviceName} && systemctl restart ${this.serviceName}`,
+          triggers: [args.unitFile],
+        },
+        { parent: this, dependsOn: copyUnit },
+      );
+      new command.remote.Command(
+        `${name}-disable`,
+        {
+          connection: args.host.connection,
           delete: pulumi.interpolate`systemctl disable --now ${this.serviceName} && systemctl daemon-reload`,
         },
         { parent: this, dependsOn: copyUnit },
@@ -48,7 +56,15 @@ export class Service extends pulumi.ComponentResource {
         `${name}-enable`,
         {
           connection: args.host.connection,
-          create: pulumi.interpolate`systemctl daemon-reload && systemctl start ${this.serviceName}`,
+          create: pulumi.interpolate`systemctl daemon-reload && systemctl restart ${this.serviceName}`,
+          triggers: [args.unitFile],
+        },
+        { parent: this, dependsOn: copyUnit },
+      );
+      new command.remote.Command(
+        `${name}-disable`,
+        {
+          connection: args.host.connection,
           delete: pulumi.interpolate`systemctl stop ${this.serviceName} && systemctl daemon-reload`,
         },
         { parent: this, dependsOn: copyUnit },

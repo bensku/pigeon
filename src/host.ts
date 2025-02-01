@@ -1,13 +1,16 @@
 import * as pulumi from '@pulumi/pulumi';
 import * as command from '@pulumi/command';
 import * as fs from 'fs/promises';
+import * as apt from './apt';
 
 interface HostArgs {
   connection: command.remote.CommandArgs['connection'];
 }
 
 export class Host extends pulumi.ComponentResource {
+  #name: string;
   readonly connection: command.remote.CommandArgs['connection'];
+  #existingTasks: Map<string, pulumi.Resource> = new Map();
 
   constructor(
     name: string,
@@ -15,6 +18,7 @@ export class Host extends pulumi.ComponentResource {
     opts?: pulumi.ComponentResourceOptions,
   ) {
     super('pigeon:host:Host', name, {}, opts);
+    this.#name = name;
     this.connection = args.connection;
 
     // Prepare required directories
@@ -26,6 +30,17 @@ export class Host extends pulumi.ComponentResource {
       },
       { parent: this },
     );
+  }
+
+  installPackage(name: string, opts?: pulumi.ComponentResourceOptions) {
+    const taskName = `${this.#name}-${name}`;
+    let task = this.#existingTasks.get(taskName);
+    if (!task) {
+      // TODO non-APT package manager support
+      task = new apt.Package(taskName, { host: this, name }, opts);
+      this.#existingTasks.set(taskName, task);
+    }
+    return task;
   }
 }
 
@@ -80,7 +95,7 @@ export class FileUpload extends pulumi.ComponentResource {
       `${name}-cleanup`,
       {
         connection: args.host.connection,
-        delete: pulumi.interpolate`rm "${args.remotePath}"`,
+        delete: pulumi.interpolate`rm "${upload.remotePath}"`,
       },
       { parent: this, dependsOn: upload },
     );
