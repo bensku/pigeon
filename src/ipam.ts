@@ -76,6 +76,44 @@ export class IpamHost extends pulumi.ComponentResource {
     );
     return cmd.stdout;
   }
+
+  createHost(
+    parent: pulumi.Resource,
+    name: string,
+    hostId: pulumi.Input<string>,
+    startPort: pulumi.Input<number>,
+    endPort: pulumi.Input<number>,
+  ) {
+    new command.remote.Command(
+      `ipam-host-${name}`,
+      {
+        connection: this.#connection,
+        create: pulumi.interpolate`cd /etc/pigeon/ipam && /opt/pigeon/mini-ipam create-host "${hostId}" ${startPort} ${endPort}`,
+        delete: pulumi.interpolate`cd /etc/pigeon/ipam && /opt/pigeon/mini-ipam delete-host "${hostId}"`,
+        addPreviousOutputInEnv: false,
+      },
+      { dependsOn: this, parent },
+    );
+  }
+
+  allocatePort(
+    parent: pulumi.Resource,
+    name: string,
+    host: PortHost,
+    portId: pulumi.Input<string>,
+  ) {
+    const cmd = new command.remote.Command(
+      `ipam-host-${name}`,
+      {
+        connection: this.#connection,
+        create: pulumi.interpolate`cd /etc/pigeon/ipam && /opt/pigeon/mini-ipam allocate-port "${host.hostId}" "${portId}"`,
+        delete: pulumi.interpolate`cd /etc/pigeon/ipam && /opt/pigeon/mini-ipam free-port "${host.hostId}" "${portId}"`,
+        addPreviousOutputInEnv: false,
+      },
+      { dependsOn: [this, host], parent },
+    );
+    return cmd.stdout.apply((port) => parseInt(port, 10));
+  }
 }
 
 interface NetworkArgs {
@@ -123,6 +161,62 @@ export class IpAddress extends pulumi.ComponentResource {
       args.network,
       name,
       this.addressId,
+    );
+  }
+}
+
+export interface PortHostArgs {
+  ipamHost: IpamHost;
+  startPort: pulumi.Input<number>;
+  endPort: pulumi.Input<number>;
+}
+
+export class PortHost extends pulumi.ComponentResource {
+  ipamHost: IpamHost;
+  hostId: pulumi.Output<string>;
+
+  constructor(
+    name: string,
+    args: PortHostArgs,
+    opts?: pulumi.ComponentResourceOptions,
+  ) {
+    super('pigeon:ipam:PortHost', name, args, opts);
+    this.ipamHost = args.ipamHost;
+    const randomId = new random.RandomUuid(`${name}-id`, {}, { parent: this });
+    this.hostId = pulumi.interpolate`${name}-${randomId.result}`;
+
+    args.ipamHost.createHost(
+      this,
+      name,
+      this.hostId,
+      args.startPort,
+      args.endPort,
+    );
+  }
+}
+
+export interface PortAllocationArgs {
+  host: PortHost;
+}
+
+export class PortAllocation extends pulumi.ComponentResource {
+  readonly portId: pulumi.Output<string>;
+  readonly port: pulumi.Output<number>;
+
+  constructor(
+    name: string,
+    args: PortAllocationArgs,
+    opts?: pulumi.ComponentResourceOptions,
+  ) {
+    super('pigeon:ipam:PortAllocation', name, {}, opts);
+    const randomId = new random.RandomUuid(`${name}-id`, {}, { parent: this });
+    this.portId = pulumi.interpolate`${name}-${randomId.result}`;
+
+    this.port = args.host.ipamHost.allocatePort(
+      this,
+      name,
+      args.host,
+      this.portId,
     );
   }
 }

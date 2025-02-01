@@ -33,11 +33,20 @@ export class Host extends pulumi.ComponentResource {
   }
 
   installPackage(name: string, opts?: pulumi.ComponentResourceOptions) {
+    return this.addSetupTask(
+      `package-${name}`,
+      (host, name) => new apt.Package(name, { host, name }, opts),
+    );
+  }
+
+  addSetupTask(
+    name: string,
+    callback: (host: Host, name: string) => pulumi.Resource,
+  ) {
     const taskName = `${this.#name}-${name}`;
     let task = this.#existingTasks.get(taskName);
     if (!task) {
-      // TODO non-APT package manager support
-      task = new apt.Package(taskName, { host: this, name }, opts);
+      task = callback(this, name);
       this.#existingTasks.set(taskName, task);
     }
     return task;
