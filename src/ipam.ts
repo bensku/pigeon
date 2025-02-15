@@ -124,6 +124,7 @@ interface NetworkArgs {
 export class Network extends pulumi.ComponentResource {
   ipamHost: IpamHost;
   networkId: pulumi.Output<string>;
+  prefixLength: number;
 
   constructor(
     name: string,
@@ -132,10 +133,20 @@ export class Network extends pulumi.ComponentResource {
   ) {
     super('pigeon:ipam:Network', name, {}, opts);
     this.ipamHost = args.ipamHost;
-    const randomId = new random.RandomUuid(`${name}-id`, {}, { parent: this });
+    const randomId = new random.RandomUuid(
+      `${name}-id`,
+      {
+        // We'll need new id for updates, since new resource is created before old is destroyed
+        keepers: {
+          cidr: args.cidr,
+        },
+      },
+      { parent: this },
+    );
     this.networkId = pulumi.interpolate`${name}-${randomId.result}`;
 
     args.ipamHost.createNetwork(this, name, this.networkId, args.cidr);
+    this.prefixLength = parseInt(args.cidr.split('/')[1], 10);
   }
 }
 

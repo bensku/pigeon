@@ -10,6 +10,8 @@ export interface ServiceArgs {
   unitFile: pulumi.Input<pulumi.asset.Asset>;
   unitDir?: string;
   transient?: boolean;
+
+  triggers?: any[];
 }
 
 export class Service extends pulumi.ComponentResource {
@@ -39,7 +41,7 @@ export class Service extends pulumi.ComponentResource {
         {
           connection: args.host.connection,
           create: pulumi.interpolate`systemctl daemon-reload && systemctl enable ${this.serviceName} && systemctl restart ${this.serviceName}`,
-          triggers: [args.unitFile],
+          triggers: [args.unitFile, ...(args.triggers ?? [])],
         },
         { parent: this, dependsOn: copyUnit },
       );
@@ -57,7 +59,7 @@ export class Service extends pulumi.ComponentResource {
         {
           connection: args.host.connection,
           create: pulumi.interpolate`systemctl daemon-reload && systemctl restart ${this.serviceName}`,
-          triggers: [args.unitFile],
+          triggers: [args.unitFile, ...(args.triggers ?? [])],
         },
         { parent: this, dependsOn: copyUnit },
       );

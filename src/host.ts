@@ -8,7 +8,7 @@ interface HostArgs {
 }
 
 export class Host extends pulumi.ComponentResource {
-  #name: string;
+  readonly name: string;
   readonly connection: command.remote.CommandArgs['connection'];
   #existingTasks: Map<string, pulumi.Resource> = new Map();
 
@@ -18,7 +18,7 @@ export class Host extends pulumi.ComponentResource {
     opts?: pulumi.ComponentResourceOptions,
   ) {
     super('pigeon:host:Host', name, {}, opts);
-    this.#name = name;
+    this.name = name;
     this.connection = args.connection;
 
     // Prepare required directories
@@ -26,16 +26,17 @@ export class Host extends pulumi.ComponentResource {
       name,
       {
         connection: this.connection,
-        create: 'mkdir -p /etc/pigeon && mkdir -p /opt/pigeon',
+        create:
+          'mkdir -p /etc/pigeon && mkdir -p /opt/pigeon && mkdir -p /var/pigeon/oci-uploads',
       },
       { parent: this },
     );
   }
 
-  installPackage(name: string, opts?: pulumi.ComponentResourceOptions) {
+  installPackage(packageName: string, opts?: pulumi.ComponentResourceOptions) {
     return this.addSetupTask(
-      `package-${name}`,
-      (host, name) => new apt.Package(name, { host, name }, opts),
+      `package-${packageName}`,
+      (host, name) => new apt.Package(name, { host, name: packageName }, opts),
     );
   }
 
@@ -43,10 +44,10 @@ export class Host extends pulumi.ComponentResource {
     name: string,
     callback: (host: Host, name: string) => pulumi.Resource,
   ) {
-    const taskName = `${this.#name}-${name}`;
+    const taskName = `${this.name}-${name}`;
     let task = this.#existingTasks.get(taskName);
     if (!task) {
-      task = callback(this, name);
+      task = callback(this, taskName);
       this.#existingTasks.set(taskName, task);
     }
     return task;
