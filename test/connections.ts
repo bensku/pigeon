@@ -6,6 +6,7 @@ const privateKey = fs.readFileSync(
   'utf-8',
 );
 
+// TODO do not use private DNS names here
 export const CONNECTIONS: command.remote.CommandArgs['connection'][] = [
   {
     host: 'test1',

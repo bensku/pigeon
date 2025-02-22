@@ -25,14 +25,20 @@ export async function pulumiProgram() {
   const pod1 = new oci.Pod('pod', {
     host: host1,
     name: 'test-pod',
-  });
-  net.attachPod(pod1, {
-    hostname: 'backend',
-    groups: ['backend'],
-    firewall: {
-      inbound: [{ host: 'any', port: 8081 }],
-      outbound: [],
-    },
+    networks: [
+      {
+        network: net,
+        endpoint: {
+          hostname: 'backend',
+          groups: ['backend'],
+          firewall: {
+            inbound: [{ host: 'any', port: 8081 }],
+            outbound: [],
+          },
+        },
+      },
+    ],
+    ports: [[8081, 80]],
   });
   const backend = new oci.Container('container', {
     pod: pod1,
@@ -42,9 +48,6 @@ export async function pulumiProgram() {
       ['TEST_VAR', 'test_str'],
       ['TEST_VAR2', 'test_str2'],
     ],
-    ports: [[8081, 80]],
-    disablePodDns: true,
-    dnsSearchDomain: 'pigeonnnet',
   });
 
   return {};

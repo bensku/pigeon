@@ -23,7 +23,7 @@ export class Host extends pulumi.ComponentResource {
 
     // Prepare required directories
     new command.remote.Command(
-      name,
+      `${name}-mkdirs`,
       {
         connection: this.connection,
         create:

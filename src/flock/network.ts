@@ -1,4 +1,5 @@
 import * as pulumi from '@pulumi/pulumi';
+import * as random from '@pulumi/random';
 import * as host from '../host';
 import * as ipam from '../ipam';
 import * as oci from '../oci';
@@ -6,6 +7,7 @@ import { certManagerCmd } from './cert-manager';
 import { PodAttachment } from './container';
 import { Endpoint, EndpointArgs } from './endpoint';
 import { Enrollment } from './host';
+import { PodNetworkProvider } from '../oci/network';
 
 export interface NetworkArgs {
   /**
@@ -44,12 +46,18 @@ interface Lighthouse {
   overlayIp: pulumi.Output<string>;
 }
 
-export class Network extends pulumi.ComponentResource {
+export class Network
+  extends pulumi.ComponentResource
+  implements PodNetworkProvider<Omit<Omit<EndpointArgs, 'network'>, 'host'>>
+{
   #name: string;
-  readonly domain: string;
+  readonly networkId: pulumi.Output<string>;
+  readonly dnsDomain: pulumi.Output<string>;
+
   readonly underlayPortRange: [number, number];
   readonly ipam: ipam.Network;
   readonly lighthouses: Lighthouse[];
+  readonly #dnsServers: pulumi.Output<string>[];
   readonly underlayDnsSearchDomain?: string;
 
   #epochs: [CaCertificate, CaCertificate];
@@ -63,7 +71,9 @@ export class Network extends pulumi.ComponentResource {
   ) {
     super('pigeon:flock:Network', name, args, opts);
     this.#name = name;
-    this.domain = args.domain ?? 'pigeon.internal';
+    const randomId = new random.RandomUuid(`${name}-id`, {}, { parent: this });
+    this.networkId = pulumi.interpolate`${name}-${randomId.result}`;
+    this.dnsDomain = pulumi.output(args.domain ?? 'pigeon.internal');
     this.underlayPortRange = args.underlayPortRange ?? [30000, 31000];
     this.underlayDnsSearchDomain = args.underlayDnsSearchDomain;
     this.#enrolledHosts = new Map();
@@ -100,6 +110,7 @@ export class Network extends pulumi.ComponentResource {
       const pod = new oci.Pod(`${name}-lh-pod-${i}`, {
         host: target,
         name: 'flock-lighthouse',
+        networks: [],
       });
       const endpoint = new Endpoint(`${name}-lh-${i}`, {
         network: this,
@@ -107,7 +118,6 @@ export class Network extends pulumi.ComponentResource {
         groups: ['lighthouses'],
         // TODO support custom port ranges for lighthouses
         host: this.enrollHost(target),
-        // Lighthouses should not send or receive any normal traffic
         firewall: {
           // Lighthouses also serve as private DNS resolvers
           inbound: [{ host: 'any', port: 53 }],
@@ -124,10 +134,7 @@ export class Network extends pulumi.ComponentResource {
         overlayIp: endpoint.overlayIp,
       };
     });
-  }
-
-  get currentCa() {
-    return this.#epochs[1];
+    this.#dnsServers = this.lighthouses.map((lh) => lh.overlayIp);
   }
 
   #createCaForEpoch(name: string, epoch: number): CaCertificate {
@@ -171,6 +178,10 @@ export class Network extends pulumi.ComponentResource {
     return enrollment;
   }
 
+  get currentCa() {
+    return this.#epochs[1];
+  }
+
   /**
    * Creates an endpoint to this network and attaches it to given pod.
    * @param pod The pod to attach.
@@ -190,6 +201,10 @@ export class Network extends pulumi.ComponentResource {
       pod,
       endpoint,
     });
+  }
+
+  dnsServers(pod: oci.Pod): pulumi.Output<string>[] {
+    return this.#dnsServers; // Same for all, for now
   }
 }
 

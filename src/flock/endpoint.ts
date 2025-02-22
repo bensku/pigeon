@@ -127,7 +127,7 @@ export class Endpoint extends pulumi.ComponentResource {
     this.network = args.network;
     this.firewall = args.firewall;
     const ca = args.network.currentCa;
-    this.hostname = pulumi.interpolate`${args.hostname}.${args.network.domain}`;
+    this.hostname = pulumi.interpolate`${args.hostname}.${args.network.dnsDomain}`;
 
     const addr = new ipam.IpAddress(`${name}-ip`, {
       network: args.network.ipam,

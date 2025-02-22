@@ -1,6 +1,5 @@
 import { CONNECTIONS } from './connections';
 import * as host from '../src/host';
-import * as apt from '../src/apt';
 import * as oci from '../src/oci';
 
 export async function pulumiProgram() {
@@ -10,6 +9,8 @@ export async function pulumiProgram() {
   const pod = new oci.Pod('pod', {
     host: host1,
     name: 'test-pod',
+    networks: [],
+    ports: [[8081, 80]],
   });
   const volume = new oci.Volume('volume', {
     pod,
@@ -21,7 +22,6 @@ export async function pulumiProgram() {
     image: 'docker.io/nginx',
     mounts: [[volume, '/test-volume']],
     environment: [['TEST_VAR', 'test_str']],
-    ports: [[8081, 80]],
   });
 
   return {};

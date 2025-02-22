@@ -85,9 +85,8 @@ export function composeConfig(
       punch: true,
       response: false,
     },
-    // For lighthouses, disable TUN device creation - we have no need for it
     tun: {
-      disabled: isLighthouse,
+      disabled: false, // Even lighthouses need this for DNS
     },
     firewall: {
       outbound: endpoint.firewall.outbound.map(convertFirewallRule),
