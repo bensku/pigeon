@@ -1,4 +1,5 @@
 import { CONNECTIONS } from './connections';
+import * as pulumi from '@pulumi/pulumi';
 import * as host from '../src/host';
 import * as flock from '../src/flock';
 import * as apt from '../src/apt';
@@ -18,8 +19,10 @@ export async function pulumiProgram() {
   const net = new flock.Network('test-net', {
     epoch: 1,
     ipRange: '10.155.42.0/24',
-    lighthouses: [host1, host3],
-    underlayDnsSearchDomain: 'pigeonnnet',
+    lighthouses: [
+      { host: host1, underlayPort: 30000 },
+      { host: host3, underlayPort: 30001 },
+    ],
   });
 
   const pod1 = new oci.Pod('pod', {
@@ -30,17 +33,16 @@ export async function pulumiProgram() {
         network: net,
         endpoint: {
           hostname: 'backend',
-          groups: ['backend'],
+          groups: ['test-app'],
           firewall: {
-            inbound: [{ host: 'any', port: 8081 }],
+            inbound: [{ host: 'any', port: 80 }],
             outbound: [],
           },
         },
       },
     ],
-    ports: [[8081, 80]],
   });
-  const backend = new oci.Container('container', {
+  new oci.Container('backend', {
     pod: pod1,
     name: 'backend',
     image: 'docker.io/nginx',
@@ -48,6 +50,45 @@ export async function pulumiProgram() {
       ['TEST_VAR', 'test_str'],
       ['TEST_VAR2', 'test_str2'],
     ],
+  });
+
+  const pod2 = new oci.Pod('pod2', {
+    host: host2,
+    name: 'test-pod2',
+    networks: [
+      {
+        network: net,
+        endpoint: {
+          hostname: 'proxy',
+          groups: ['test-app'],
+          firewall: {
+            inbound: [],
+            outbound: [{ host: 'backend', port: 80 }],
+          },
+        },
+      },
+    ],
+    ports: [[8080, 80]],
+  });
+
+  const proxyConf = new oci.LocalFile('proxy-conf', {
+    pod: pod2,
+    source: new pulumi.asset.StringAsset(`server {
+    location / {
+        proxy_pass http://backend.pigeon.internal;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}`),
+  });
+  new oci.Container('proxy', {
+    pod: pod2,
+    name: 'proxy',
+    image: 'docker.io/nginx',
+    mounts: [[proxyConf, '/etc/nginx/conf.d/default.conf']],
   });
 
   return {};

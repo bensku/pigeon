@@ -14,8 +14,8 @@ export interface ContainerArgs {
   linuxCapabilities?: string[];
   linuxDevices?: string[];
 
-  disablePodNetwork?: boolean;
-  directPorts?: [
+  networkMode?: 'pod' | 'bridge' | 'host';
+  bridgePorts?: [
     pulumi.Input<number>,
     pulumi.Input<number>,
     ('tcp' | 'udp')?,
@@ -40,7 +40,8 @@ export class Container extends pulumi.ComponentResource {
     super('pigeon:oci:Container', name, args, opts);
     this.containerName = pulumi.interpolate`${args.pod.podName}-${args.name}`;
 
-    if (args.directPorts && !args.disablePodNetwork) {
+    const networkMode = args.networkMode ?? 'pod';
+    if (args.bridgePorts && networkMode != 'bridge') {
       throw new Error(
         'containers that use pod networking cannot use direct ports',
       );
@@ -75,7 +76,7 @@ export class Container extends pulumi.ComponentResource {
     );
 
     const ports = pulumi.concat(
-      ...(args.directPorts ?? []).map(
+      ...(args.bridgePorts ?? []).map(
         ([hostPort, containerPort, proto]) =>
           pulumi.interpolate`PublishPort=${hostPort}:${containerPort}/${proto ?? 'tcp'}\n`,
       ),
@@ -92,10 +93,10 @@ export class Container extends pulumi.ComponentResource {
     const unit = pulumi.interpolate`[Unit]
 Description=Container ${args.name} in pod ${args.pod.podName}
 ${
-  args.disablePodNetwork
-    ? ''
-    : pulumi.interpolate`Requires=${args.pod.podNetService}.service
+  networkMode == 'pod'
+    ? pulumi.interpolate`Requires=${args.pod.podNetService}.service
 After=${args.pod.podNetService}.service`
+    : ''
 }
 
 [Container]
@@ -106,7 +107,7 @@ ${args.entrypoint ? pulumi.interpolate`Entrypoint=${args.entrypoint}\n` : ''}
 ${args.command ? pulumi.interpolate`Exec=${args.command}\n` : ''}
 
 # Pod networking
-${args.disablePodNetwork ? '' : pulumi.interpolate`Network=${args.pod.podNetName}`}
+${networkMode == 'pod' ? pulumi.interpolate`Network=${args.pod.podNetName}` : networkMode == 'host' ? 'Network=host' : ''}
 ${args.podDns ? pulumi.interpolate`DNS=${args.podDns}` : ''}
 
 # Volume mounts
@@ -141,7 +142,7 @@ WantedBy=multi-user.target default.target
         dependsOn.push(volume);
       }
       if (volume instanceof LocalFile) {
-        triggers.push(volume.source);
+        triggers.push(volume);
       }
     }
 

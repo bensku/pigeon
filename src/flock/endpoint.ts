@@ -108,11 +108,6 @@ export class Endpoint extends pulumi.ComponentResource {
   readonly certificate: pulumi.Output<string>;
 
   /**
-   * Port this endpoint uses to communicate over real (underlay) network.
-   */
-  readonly underlayPort: pulumi.Output<number>;
-
-  /**
    * The firewall policy of this endpoint.
    */
   readonly firewall: FirewallPolicy;
@@ -125,7 +120,8 @@ export class Endpoint extends pulumi.ComponentResource {
     super('pigeon:flock:Endpoint', name, args, opts);
     this.#name = name;
     this.network = args.network;
-    this.firewall = args.firewall;
+    this.firewall = structuredClone(args.firewall);
+    this.#patchFirewallPolicy();
     const ca = args.network.currentCa;
     this.hostname = pulumi.interpolate`${args.hostname}.${args.network.dnsDomain}`;
 
@@ -146,23 +142,33 @@ export class Endpoint extends pulumi.ComponentResource {
       caCert: ca.certificate,
       hostKey: this.privateKey,
       certConfig: {
-        name: this.hostname,
+        hostname: this.hostname,
         network: pulumi.interpolate`${addr.address}/${args.network.ipam.prefixLength}`,
         groups: args.groups,
         validNotBefore: new Date(0).toISOString(),
         validNotAfter: '2500-01-01T00:00:00.000Z',
       },
     });
-    this.underlayPort = new ipam.PortAllocation(`${name}-underlay-port`, {
-      host: args.host.portHost,
-    }).port;
   }
 
-  attachTo(pod: oci.Pod, lighthouse?: boolean): PodAttachment {
+  #patchFirewallPolicy() {
+    // Allow lighthouse DNS
+    this.firewall.outbound.push({
+      groups: ['lighthouses'],
+      port: 53,
+    });
+  }
+
+  attachTo(
+    pod: oci.Pod,
+    lighthouse?: boolean,
+    underlayPort?: pulumi.Input<number>,
+  ): PodAttachment {
     return new PodAttachment(`${this.#name}-attach-${pod.name}`, {
       pod,
       endpoint: this,
       lighthouse,
+      underlayPort: pulumi.output(underlayPort ?? 0),
     });
   }
 }

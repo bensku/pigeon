@@ -6,19 +6,27 @@ const privateKey = fs.readFileSync(
   'utf-8',
 );
 
-// TODO do not use private DNS names here
+const hosts = new Map(
+  fs
+    .readFileSync('/etc/hosts', 'utf-8')
+    .split('\n')
+    .filter((line) => line.trim() !== '' && !line.startsWith('#'))
+    .map((line) => line.split(/\s+/))
+    .filter((line) => line.length > 1)
+    .map((line) => [line[1], line[0]]),
+);
 export const CONNECTIONS: command.remote.CommandArgs['connection'][] = [
   {
-    host: 'test1',
+    host: hosts.get('test1')!,
     user: 'root',
     privateKey,
   },
   {
-    host: 'test2',
+    host: hosts.get('test2')!,
     user: 'root',
   },
   {
-    host: 'test3',
+    host: hosts.get('test3')!,
     user: 'root',
   },
 ];

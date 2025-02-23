@@ -26,7 +26,7 @@ interface NebulaConfig {
   };
   punchy: {
     punch: boolean;
-    response: boolean;
+    respond: boolean;
   };
   tun: {
     disabled: boolean;
@@ -34,6 +34,9 @@ interface NebulaConfig {
   firewall: {
     outbound: NebulaFirewallRule[];
     inbound: NebulaFirewallRule[];
+  };
+  logging: {
+    level: string;
   };
 }
 
@@ -47,7 +50,10 @@ interface NebulaFirewallRule {
 
 export function composeConfig(
   endpoint: Endpoint,
-  isLighthouse: boolean,
+  config: {
+    isLighthouse: boolean;
+    underlayPort: pulumi.Input<number>;
+  },
 ): pulumi.Output<NebulaConfig> {
   return pulumi.output({
     pki: {
@@ -56,7 +62,7 @@ export function composeConfig(
       key: endpoint.privateKey,
     },
     // Underlay addresses of lighthouses, unless this is the lighthouse
-    static_host_map: isLighthouse
+    static_host_map: config.isLighthouse
       ? ({} as NebulaConfig['static_host_map'])
       : pulumi
           .all(endpoint.network.lighthouses)
@@ -67,23 +73,25 @@ export function composeConfig(
           ),
     // Lighthouse configuration (note the overlay, not underlay addresses!)
     lighthouse: {
-      am_lighthouse: isLighthouse,
-      hosts: isLighthouse
+      am_lighthouse: config.isLighthouse,
+      hosts: config.isLighthouse
         ? []
         : endpoint.network.lighthouses.map((lh) => lh.overlayIp),
       // If this is lighthouse, serve DNS - but only over the overlay network!
-      serve_dns: isLighthouse,
-      dns: isLighthouse ? { host: endpoint.overlayIp, port: 53 } : undefined,
+      serve_dns: config.isLighthouse,
+      dns: config.isLighthouse
+        ? { host: endpoint.overlayIp, port: 53 }
+        : undefined,
     },
     // Listen to underlay network
     listen: {
       host: '::', // All interfaces, both IPv4 and IPv6
-      port: endpoint.underlayPort,
+      port: config.underlayPort,
     },
     // Enable basic NAT traversal just in case endpoint needs it, very little harm in that
     punchy: {
       punch: true,
-      response: false,
+      respond: true,
     },
     tun: {
       disabled: false, // Even lighthouses need this for DNS
@@ -91,6 +99,9 @@ export function composeConfig(
     firewall: {
       outbound: endpoint.firewall.outbound.map(convertFirewallRule),
       inbound: endpoint.firewall.inbound.map(convertFirewallRule),
+    },
+    logging: {
+      level: 'debug',
     },
   });
 }

@@ -23,22 +23,10 @@ export interface NetworkArgs {
    */
   ipRange: string;
 
-  lighthouses: host.Host[];
+  lighthouses: { host: host.Host; underlayPort: number }[];
   ipamHost?: ipam.IpamHost;
 
   domain?: string;
-
-  /**
-   * Port range that hosts use for sending encrypted Nebula traffic.
-   */
-  underlayPortRange?: [number, number];
-
-  /**
-   * Underlay DNS search domain. This may be necessary if the lighthouses are
-   * discovered using private DNS. Do not use unless you're seeing DNS errors
-   * on Nebula containers.
-   */
-  underlayDnsSearchDomain?: string;
 }
 
 interface Lighthouse {
@@ -54,11 +42,9 @@ export class Network
   readonly networkId: pulumi.Output<string>;
   readonly dnsDomain: pulumi.Output<string>;
 
-  readonly underlayPortRange: [number, number];
   readonly ipam: ipam.Network;
   readonly lighthouses: Lighthouse[];
   readonly #dnsServers: pulumi.Output<string>[];
-  readonly underlayDnsSearchDomain?: string;
 
   #epochs: [CaCertificate, CaCertificate];
 
@@ -74,8 +60,6 @@ export class Network
     const randomId = new random.RandomUuid(`${name}-id`, {}, { parent: this });
     this.networkId = pulumi.interpolate`${name}-${randomId.result}`;
     this.dnsDomain = pulumi.output(args.domain ?? 'pigeon.internal');
-    this.underlayPortRange = args.underlayPortRange ?? [30000, 31000];
-    this.underlayDnsSearchDomain = args.underlayDnsSearchDomain;
     this.#enrolledHosts = new Map();
 
     // Initialize IPAM for this network
@@ -83,7 +67,7 @@ export class Network
       args.ipamHost ??
       new ipam.IpamHost(
         `${name}-ipam-host`,
-        { host: args.lighthouses[0] },
+        { host: args.lighthouses[0].host },
         { parent: this },
       );
     this.ipam = new ipam.Network(
@@ -106,31 +90,30 @@ export class Network
     ];
 
     // Create lighthouses
-    this.lighthouses = args.lighthouses.map((target, i) => {
+    this.lighthouses = args.lighthouses.map(({ host, underlayPort }, i) => {
       const pod = new oci.Pod(`${name}-lh-pod-${i}`, {
-        host: target,
+        host,
         name: 'flock-lighthouse',
         networks: [],
       });
       const endpoint = new Endpoint(`${name}-lh-${i}`, {
         network: this,
-        hostname: `h1${i}.lighthouses`,
+        hostname: `lh${i}.lighthouses`,
         groups: ['lighthouses'],
-        // TODO support custom port ranges for lighthouses
-        host: this.enrollHost(target),
+        host: this.enrollHost(host),
         firewall: {
           // Lighthouses also serve as private DNS resolvers
           inbound: [{ host: 'any', port: 53 }],
           outbound: [],
         },
       });
-      endpoint.attachTo(pod, true);
+      endpoint.attachTo(pod, true, underlayPort);
       // TODO what if the host we're using for SSH is not public? add another host option?
       const underlayIp = pulumi
-        .output(target.connection)
+        .output(host.connection)
         .apply((conn) => conn.host);
       return {
-        underlayAddress: pulumi.interpolate`${underlayIp}:${endpoint.underlayPort}`,
+        underlayAddress: pulumi.interpolate`${underlayIp}:${underlayPort}`,
         overlayIp: endpoint.overlayIp,
       };
     });
@@ -170,7 +153,6 @@ export class Network
       {
         host: host,
         network: this,
-        portRange: this.underlayPortRange,
       },
       { parent: this },
     );

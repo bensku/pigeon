@@ -1,4 +1,5 @@
 import * as pulumi from '@pulumi/pulumi';
+import stringify from 'json-stable-stringify';
 import * as oci from '../oci';
 import { Endpoint, EndpointArgs } from './endpoint';
 import { composeConfig } from './nebula-config';
@@ -15,10 +16,12 @@ export interface PodAttachmentArgs {
   pod: oci.Pod;
 
   lighthouse?: boolean;
+  underlayPort?: pulumi.Output<number>;
 }
 
 export class PodAttachment extends pulumi.ComponentResource {
   readonly endpoint: Endpoint;
+  readonly underlayPort: pulumi.Output<number>;
 
   constructor(
     name: string,
@@ -27,15 +30,17 @@ export class PodAttachment extends pulumi.ComponentResource {
   ) {
     super('pigeon:flock:PodAttachment', name, args, opts);
     this.endpoint = args.endpoint;
+    this.underlayPort = args.underlayPort ?? pulumi.output(0);
 
     // Generate Nebula configuration and upload it to host
     const config = new oci.LocalFile(
       `${name}-nebula-config`,
       {
         pod: args.pod,
-        source: composeConfig(this.endpoint, args.lighthouse ?? false).apply(
-          (cfg) => new pulumi.asset.StringAsset(JSON.stringify(cfg)),
-        ),
+        source: composeConfig(this.endpoint, {
+          isLighthouse: args.lighthouse ?? false,
+          underlayPort: this.underlayPort,
+        }).apply((cfg) => new pulumi.asset.StringAsset(stringify(cfg)!)),
       },
       {
         parent: this,
@@ -49,14 +54,10 @@ export class PodAttachment extends pulumi.ComponentResource {
         pod: args.pod,
         image: 'docker.io/nebulaoss/nebula:1.9.5', // TODO don't hardcode
         name: pulumi.interpolate`nebula-${args.endpoint.network.networkId}`,
-        disablePodNetwork: args.lighthouse,
-        directPorts: args.lighthouse
-          ? [[this.endpoint.underlayPort, this.endpoint.underlayPort, 'udp']]
-          : undefined,
+        networkMode: args.lighthouse ? 'host' : 'pod',
         mounts: [[config, '/config/config.yml']], // It is actually JSON, but this is the expected path
         linuxCapabilities: ['NET_ADMIN'],
         linuxDevices: ['/dev/net/tun'],
-        //dnsSearchDomain: this.endpoint.network.underlayDnsSearchDomain,
       },
       {
         parent: this,

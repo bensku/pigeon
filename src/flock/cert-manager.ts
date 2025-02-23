@@ -54,7 +54,7 @@ interface CertManagerArgs {
   caCert?: pulumi.Input<string>;
   hostKey?: pulumi.Input<string>;
   certConfig?: {
-    name: pulumi.Input<string>;
+    hostname: pulumi.Input<string>;
     network: pulumi.Input<string>;
     groups: pulumi.Input<string[]>;
     validNotBefore: pulumi.Input<string>;

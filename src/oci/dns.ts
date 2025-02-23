@@ -63,10 +63,10 @@ server=8.8.8.8
         name: 'dnsmasq',
         image: 'ghcr.io/bensku/pigeon/dnsmasq', // TODO use specific tag
         podDns: '127.0.0.1',
-        disablePodNetwork: true,
+        networkMode: 'bridge',
         mounts: [[configFile, '/etc/dnsmasq.conf']],
         // This container serves as pod network, so pod's ports are its ports!
-        directPorts: args.pod.ports,
+        bridgePorts: args.pod.ports,
       },
       { parent: this },
     );
