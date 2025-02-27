@@ -36,7 +36,7 @@ Label=pod=${args.name}
 
 [Install]
 WantedBy=multi-user.target default.target
-`.apply((unit) => new pulumi.asset.StringAsset(unit)),
+`,
         unitDir: '/etc/containers/systemd',
         transient: true,
       },

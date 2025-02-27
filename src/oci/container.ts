@@ -152,7 +152,7 @@ WantedBy=multi-user.target default.target
         host: args.pod.host,
         name: pulumi.interpolate`${args.pod.podName}-${args.name}`,
         fileSuffix: '.container',
-        unitFile: unit.apply((unit) => new pulumi.asset.StringAsset(unit)),
+        unitFile: unit,
         unitDir: '/etc/containers/systemd',
         transient: true,
         triggers,

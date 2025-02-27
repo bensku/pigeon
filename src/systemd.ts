@@ -1,13 +1,14 @@
 import * as pulumi from '@pulumi/pulumi';
 import * as command from '@pulumi/command';
 import * as host from './host';
+import * as ssh from './ssh';
 
 export interface ServiceArgs {
   host: host.Host;
   name: pulumi.Input<string>;
   serviceSuffix?: string;
   fileSuffix?: string;
-  unitFile: pulumi.Input<pulumi.asset.Asset>;
+  unitFile: pulumi.Input<string>;
   unitDir?: string;
   transient?: boolean;
 
@@ -25,52 +26,41 @@ export class Service extends pulumi.ComponentResource {
     super('pigeon:systemd:Service', name, args, opts);
     this.serviceName = pulumi.interpolate`${args.name}${args.serviceSuffix ?? ''}`;
 
-    const copyUnit = new host.FileUpload(
-      `${name}-copy-unit`,
+    new ssh.RunActions(
+      `${name}-actions`,
       {
-        host: args.host,
-        source: args.unitFile,
-        remotePath: pulumi.interpolate`${args.unitDir ?? '/etc/systemd/system/'}/${args.name}${args.fileSuffix ?? ''}`,
+        connection: args.host.connection,
+        actions: sshActions(args),
+        triggers: args.triggers,
       },
-      { parent: this, dependsOn: args.host },
+      { parent: this, dependsOn: args.host, deleteBeforeReplace: true },
     );
-
-    if (!args.transient) {
-      new command.remote.Command(
-        `${name}-enable`,
-        {
-          connection: args.host.connection,
-          create: pulumi.interpolate`systemctl daemon-reload && systemctl enable ${this.serviceName} && systemctl restart ${this.serviceName}`,
-          triggers: [args.unitFile, ...(args.triggers ?? [])],
-        },
-        { parent: this, dependsOn: copyUnit },
-      );
-      new command.remote.Command(
-        `${name}-disable`,
-        {
-          connection: args.host.connection,
-          delete: pulumi.interpolate`systemctl disable --now ${this.serviceName} && systemctl daemon-reload`,
-        },
-        { parent: this, dependsOn: copyUnit },
-      );
-    } else {
-      new command.remote.Command(
-        `${name}-enable`,
-        {
-          connection: args.host.connection,
-          create: pulumi.interpolate`systemctl daemon-reload && systemctl restart ${this.serviceName}`,
-          triggers: [args.unitFile, ...(args.triggers ?? [])],
-        },
-        { parent: this, dependsOn: copyUnit },
-      );
-      new command.remote.Command(
-        `${name}-disable`,
-        {
-          connection: args.host.connection,
-          delete: pulumi.interpolate`systemctl stop ${this.serviceName} && systemctl daemon-reload`,
-        },
-        { parent: this, dependsOn: copyUnit },
-      );
-    }
   }
+}
+
+export function sshActions(args: ServiceArgs): ssh.Action[] {
+  const serviceName = pulumi.interpolate`${args.name}${args.serviceSuffix ?? ''}`;
+  const actions: ssh.Action[] = [
+    {
+      type: 'upload',
+      data: args.unitFile,
+      remotePath: pulumi.interpolate`${args.unitDir ?? '/etc/systemd/system/'}/${args.name}${args.fileSuffix ?? ''}`,
+    },
+  ];
+  if (args.transient) {
+    actions.push({
+      type: 'command',
+      create: pulumi.interpolate`systemctl daemon-reload && systemctl restart ${serviceName}`,
+      // TODO do we actually need to stop?
+      delete: pulumi.interpolate`systemctl stop ${serviceName} && systemctl daemon-reload`,
+    });
+  } else {
+    actions.push({
+      type: 'command',
+      create: pulumi.interpolate`systemctl daemon-reload && systemctl enable --now ${serviceName}`,
+      delete: pulumi.interpolate`systemctl disable --now ${serviceName} && systemctl daemon-reload`,
+    });
+  }
+
+  return actions;
 }
