@@ -30,6 +30,7 @@ interface NebulaConfig {
   };
   tun: {
     disabled: boolean;
+    dev: string;
   };
   firewall: {
     outbound: NebulaFirewallRule[];
@@ -95,10 +96,20 @@ export function composeConfig(
     },
     tun: {
       disabled: false, // Even lighthouses need this for DNS
+      dev: pulumi
+        .all([endpoint.network.networkId, endpoint.hostname])
+        .apply(
+          ([networkId, hostname]) =>
+            `nb${networkId.replace('-', '').substring(0, 5)}${hostname.replace('-', '').substring(0, 8)}`,
+        ),
     },
     firewall: {
-      outbound: endpoint.firewall.outbound.map(convertFirewallRule),
-      inbound: endpoint.firewall.inbound.map(convertFirewallRule),
+      outbound: endpoint.firewall.outbound.map((rule) =>
+        convertFirewallRule(endpoint, rule),
+      ),
+      inbound: endpoint.firewall.inbound.map((rule) =>
+        convertFirewallRule(endpoint, rule),
+      ),
     },
     logging: {
       level: 'debug',
@@ -106,11 +117,20 @@ export function composeConfig(
   });
 }
 
-function convertFirewallRule(rule: FirewallRule): NebulaFirewallRule {
-  return {
+function convertFirewallRule(
+  endpoint: Endpoint,
+  rule: FirewallRule,
+): pulumi.Output<NebulaFirewallRule> {
+  return pulumi.output({
     port: rule.port,
     proto: rule.proto ?? 'any',
-    host: 'host' in rule ? rule.host : undefined,
+    // Add DNS domain to hostnames in firewall for consistency with rest of Flock config
+    host:
+      'host' in rule
+        ? rule.host == 'any'
+          ? 'any'
+          : pulumi.interpolate`${rule.host}.${endpoint.network.dnsDomain}`
+        : undefined,
     groups: 'groups' in rule ? rule.groups : undefined,
-  };
+  });
 }

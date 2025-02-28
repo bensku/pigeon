@@ -2,6 +2,7 @@ import * as pulumi from '@pulumi/pulumi';
 import * as random from '@pulumi/random';
 import * as host from '../host';
 import * as systemd from '../systemd';
+import * as ssh from '../ssh';
 import { Pod } from './pod';
 
 export interface VolumeArgs {
@@ -56,11 +57,11 @@ export interface LocalFileArgs {
    * Source for the file. Can be a local file or in-memory asset.
    * The content will be uploaded to a temporary location.
    */
-  source: pulumi.Input<pulumi.asset.Asset>;
+  source: pulumi.Input<string>;
 }
 
 export class LocalFile extends pulumi.ComponentResource {
-  readonly source: pulumi.Input<pulumi.asset.Asset>;
+  readonly source: pulumi.Input<string>;
   readonly filePath: pulumi.Output<string>;
 
   constructor(
@@ -74,14 +75,19 @@ export class LocalFile extends pulumi.ComponentResource {
     const id = new random.RandomUuid(`${name}-id`, {}, { parent: this });
     this.filePath = pulumi.interpolate`/var/pigeon/oci-uploads/${name}-${id.id}`;
 
-    new host.FileUpload(
+    new ssh.RunActions(
       `${name}-upload`,
       {
-        host: args.pod.host,
-        source: args.source,
-        remotePath: this.filePath,
+        connection: args.pod.host.connection,
+        actions: [
+          {
+            type: 'upload',
+            data: this.source,
+            remotePath: this.filePath,
+          },
+        ],
       },
-      { parent: this, dependsOn: args.pod },
+      { parent: this, dependsOn: args.pod, deleteBeforeReplace: true },
     );
   }
 }

@@ -1,6 +1,5 @@
 import * as pulumi from '@pulumi/pulumi';
 import * as command from '@pulumi/command';
-import * as fs from 'fs/promises';
 import { NodeSSH } from 'node-ssh';
 
 export type Action = CommandAction | UploadAction;
@@ -99,7 +98,7 @@ export class RunActions extends pulumi.dynamic.Resource {
   }
 }
 
-async function connectSSH(
+export async function connectSSH(
   connection: pulumi.Unwrap<command.remote.CommandArgs['connection']>,
 ): Promise<NodeSSH> {
   const ssh = new NodeSSH();
@@ -117,13 +116,14 @@ async function runCreateAction(
   ssh: NodeSSH,
   action: pulumi.Unwrap<Action>,
 ): Promise<void> {
+  const fs = await import('fs/promises');
   switch (action.type) {
     case 'command':
       console.log(`run: ${action.create}`);
       const cmdResult = await ssh.execCommand(action.create);
       console.log(cmdResult.stdout);
       if (cmdResult.code != 0) {
-        console.error(`Exit ${cmdResult.code} != 0: ${cmdResult.stderr}`);
+        throw new Error(`Exit ${cmdResult.code} != 0: ${cmdResult.stderr}`);
       }
       break;
     case 'upload':
@@ -149,7 +149,9 @@ async function runDeleteAction(
       if (action.delete) {
         console.log(`run: ${action.delete}`);
         const delCmdResult = await ssh.execCommand(action.delete);
-        if (delCmdResult.stderr) {
+        if (delCmdResult.code != 0) {
+          // Be intentionally more forgiving when deleting, we don't want THAT to fail!
+          // TODO make this configurable?
           console.error(
             `Error executing delete command: ${delCmdResult.stderr}`,
           );

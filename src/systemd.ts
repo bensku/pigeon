@@ -44,7 +44,7 @@ export function sshActions(args: ServiceArgs): ssh.Action[] {
     {
       type: 'upload',
       data: args.unitFile,
-      remotePath: pulumi.interpolate`${args.unitDir ?? '/etc/systemd/system/'}/${args.name}${args.fileSuffix ?? ''}`,
+      remotePath: pulumi.interpolate`${args.unitDir ?? '/etc/systemd/system/'}/${args.name}${args.fileSuffix ?? '.service'}`,
     },
   ];
   if (args.transient) {

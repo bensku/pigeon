@@ -5,6 +5,7 @@ import { Enrollment } from './host';
 import { Network } from './network';
 import { certManagerCmd } from './cert-manager';
 import { PodAttachment } from './container';
+import { EndpointProvider } from './endpoint-provider';
 
 export interface EndpointArgs {
   /**
@@ -79,8 +80,13 @@ interface GroupFirewallRule extends BaseFirewallRule {
 
 export type FirewallRule = HostFirewallRule | GroupFirewallRule;
 
-export class Endpoint extends pulumi.ComponentResource {
+export class Endpoint extends pulumi.dynamic.Resource {
   #name: string;
+
+  /**
+   * Generated unique endpoint id.
+   */
+  declare readonly endpointId: pulumi.Output<string>;
 
   /**
    * Network this endpoint belongs to.
@@ -95,17 +101,17 @@ export class Endpoint extends pulumi.ComponentResource {
   /**
    * IP address of the endpoint within the overlay network.
    */
-  readonly overlayIp: pulumi.Output<string>;
+  declare readonly overlayIp: pulumi.Output<string>;
 
   /**
    * Nebula private key for this endpoint.
    */
-  readonly privateKey: pulumi.Output<string>;
+  declare readonly privateKey: pulumi.Output<string>;
 
   /**
    * Certificate of this endpoint.
    */
-  readonly certificate: pulumi.Output<string>;
+  declare readonly certificate: pulumi.Output<string>;
 
   /**
    * The firewall policy of this endpoint.
@@ -117,38 +123,36 @@ export class Endpoint extends pulumi.ComponentResource {
     args: EndpointArgs,
     opts?: pulumi.ComponentResourceOptions,
   ) {
-    super('pigeon:flock:Endpoint', name, args, opts);
+    super(
+      new EndpointProvider(),
+      name,
+      {
+        ipamConnection: args.network.ipam.ipamHost.connection,
+        networkId: args.network.networkId,
+        networkPrefixLen: args.network.ipam.prefixLength,
+
+        caKey: args.network.currentCa.privateKey,
+        caCert: args.network.currentCa.certificate,
+        hostname: pulumi.interpolate`${args.hostname}.${args.network.dnsDomain}`,
+        groups: args.groups,
+
+        // Outputs
+        endpointId: undefined,
+        overlayIp: undefined,
+        privateKey: undefined,
+        certificate: undefined,
+      },
+      {
+        ...opts,
+        // TODO do not break custom dependsOn
+        dependsOn: [args.network],
+      },
+    );
     this.#name = name;
     this.network = args.network;
     this.firewall = structuredClone(args.firewall);
     this.#patchFirewallPolicy();
-    const ca = args.network.currentCa;
     this.hostname = pulumi.interpolate`${args.hostname}.${args.network.dnsDomain}`;
-
-    const addr = new ipam.IpAddress(`${name}-ip`, {
-      network: args.network.ipam,
-    });
-    this.overlayIp = addr.address;
-
-    this.privateKey = certManagerCmd(this, `${name}-endpoint-key`, {
-      mode: 'host',
-      target: 'key',
-      caKey: ca.privateKey,
-    });
-    this.certificate = certManagerCmd(this, `${name}-endpoint-cert`, {
-      mode: 'host',
-      target: 'cert',
-      caKey: ca.privateKey,
-      caCert: ca.certificate,
-      hostKey: this.privateKey,
-      certConfig: {
-        hostname: this.hostname,
-        network: pulumi.interpolate`${addr.address}/${args.network.ipam.prefixLength}`,
-        groups: args.groups,
-        validNotBefore: new Date(0).toISOString(),
-        validNotAfter: '2500-01-01T00:00:00.000Z',
-      },
-    });
   }
 
   #patchFirewallPolicy() {

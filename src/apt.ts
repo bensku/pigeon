@@ -5,6 +5,7 @@ import * as host from './host';
 export interface PackageArgs {
   host: host.Host;
   name: string;
+  removeOnDelete?: boolean;
 }
 
 export class Package extends pulumi.ComponentResource {
@@ -20,8 +21,9 @@ export class Package extends pulumi.ComponentResource {
       {
         connection: args.host.connection,
         create: `apt-get -qq update && apt-get install -qq ${args.name}`,
-        // TODO what if package already existed before create?
-        delete: `apt-get remove -qq ${args.name}`,
+        delete: args.removeOnDelete
+          ? `apt-get remove -qq ${args.name}`
+          : undefined,
         addPreviousOutputInEnv: false,
       },
       { parent: this, dependsOn: args.host },

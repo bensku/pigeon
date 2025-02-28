@@ -24,9 +24,11 @@ export const CONNECTIONS: command.remote.CommandArgs['connection'][] = [
   {
     host: hosts.get('test2')!,
     user: 'root',
+    privateKey,
   },
   {
     host: hosts.get('test3')!,
     user: 'root',
+    privateKey,
   },
 ];

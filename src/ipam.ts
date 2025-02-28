@@ -2,13 +2,14 @@ import * as pulumi from '@pulumi/pulumi';
 import * as command from '@pulumi/command';
 import * as random from '@pulumi/random';
 import * as host from './host';
+import { connectSSH } from './ssh';
 
 interface IpamHostArgs {
   host: host.Host;
 }
 
 export class IpamHost extends pulumi.ComponentResource {
-  #connection: command.remote.CommandArgs['connection'];
+  readonly connection: command.remote.CommandArgs['connection'];
 
   constructor(
     name: string,
@@ -16,7 +17,7 @@ export class IpamHost extends pulumi.ComponentResource {
     opts?: pulumi.ComponentResourceOptions,
   ) {
     super('pigeon:ipam:IpamHost', name, args, opts);
-    this.#connection = args.host.connection;
+    this.connection = args.host.connection;
 
     // Install mini-ipam on machine
     const copy = new host.FileUpload(
@@ -33,7 +34,7 @@ export class IpamHost extends pulumi.ComponentResource {
     new command.remote.Command(
       `${name}-commands`,
       {
-        connection: this.#connection,
+        connection: this.connection,
         create: 'chmod +x /opt/pigeon/mini-ipam && mkdir -p /etc/pigeon/ipam',
       },
       { parent: this, dependsOn: copy },
@@ -49,7 +50,7 @@ export class IpamHost extends pulumi.ComponentResource {
     new command.remote.Command(
       `ipam-net-${name}`,
       {
-        connection: this.#connection,
+        connection: this.connection,
         create: pulumi.interpolate`cd /etc/pigeon/ipam && /opt/pigeon/mini-ipam create-network "${networkId}" "${cidr}"`,
         delete: pulumi.interpolate`cd /etc/pigeon/ipam && /opt/pigeon/mini-ipam destroy-network "${networkId}"`,
         addPreviousOutputInEnv: false,
@@ -67,7 +68,7 @@ export class IpamHost extends pulumi.ComponentResource {
     const cmd = new command.remote.Command(
       `ipam-ip-${name}`,
       {
-        connection: this.#connection,
+        connection: this.connection,
         create: pulumi.interpolate`cd /etc/pigeon/ipam && /opt/pigeon/mini-ipam allocate-address "${network.networkId}" "${id}"`,
         delete: pulumi.interpolate`cd /etc/pigeon/ipam && /opt/pigeon/mini-ipam free-address "${network.networkId}" "${id}" || true`,
         addPreviousOutputInEnv: false,
@@ -87,7 +88,7 @@ export class IpamHost extends pulumi.ComponentResource {
     new command.remote.Command(
       `ipam-host-${name}`,
       {
-        connection: this.#connection,
+        connection: this.connection,
         create: pulumi.interpolate`cd /etc/pigeon/ipam && /opt/pigeon/mini-ipam create-host "${hostId}" ${startPort} ${endPort}`,
         delete: pulumi.interpolate`cd /etc/pigeon/ipam && /opt/pigeon/mini-ipam delete-host "${hostId}"`,
         addPreviousOutputInEnv: false,
@@ -105,7 +106,7 @@ export class IpamHost extends pulumi.ComponentResource {
     const cmd = new command.remote.Command(
       `ipam-host-${name}`,
       {
-        connection: this.#connection,
+        connection: this.connection,
         create: pulumi.interpolate`cd /etc/pigeon/ipam && /opt/pigeon/mini-ipam allocate-port "${host.hostId}" "${portId}"`,
         delete: pulumi.interpolate`cd /etc/pigeon/ipam && /opt/pigeon/mini-ipam free-port "${host.hostId}" "${portId}"`,
         addPreviousOutputInEnv: false,
@@ -119,6 +120,7 @@ export class IpamHost extends pulumi.ComponentResource {
 interface NetworkArgs {
   ipamHost: IpamHost;
   cidr: string;
+  networkId: pulumi.Input<string>;
 }
 
 export class Network extends pulumi.ComponentResource {
@@ -133,17 +135,7 @@ export class Network extends pulumi.ComponentResource {
   ) {
     super('pigeon:ipam:Network', name, {}, opts);
     this.ipamHost = args.ipamHost;
-    const randomId = new random.RandomUuid(
-      `${name}-id`,
-      {
-        // We'll need new id for updates, since new resource is created before old is destroyed
-        keepers: {
-          cidr: args.cidr,
-        },
-      },
-      { parent: this },
-    );
-    this.networkId = pulumi.interpolate`${name}-${randomId.result}`;
+    this.networkId = pulumi.output(args.networkId);
 
     args.ipamHost.createNetwork(this, name, this.networkId, args.cidr);
     this.prefixLength = parseInt(args.cidr.split('/')[1], 10);
@@ -230,4 +222,34 @@ export class PortAllocation extends pulumi.ComponentResource {
       this.portId,
     );
   }
+}
+
+export async function allocateAddressManual(
+  connection: pulumi.Unwrap<command.remote.CommandArgs['connection']>,
+  networkId: string,
+  addressId: string,
+) {
+  const ssh = await connectSSH(connection);
+  const result = await ssh.execCommand(
+    `cd /etc/pigeon/ipam && /opt/pigeon/mini-ipam allocate-address "${networkId}" "${addressId}"`,
+  );
+  if (result.code != 0) {
+    throw new Error(result.stderr);
+  }
+  return result.stdout;
+}
+
+export async function freeAddressManual(
+  connection: pulumi.Unwrap<command.remote.CommandArgs['connection']>,
+  networkId: string,
+  addressId: string,
+) {
+  const ssh = await connectSSH(connection);
+  const result = await ssh.execCommand(
+    `cd /etc/pigeon/ipam && /opt/pigeon/mini-ipam free-address "${networkId}" "${addressId}" || true`,
+  );
+  if (result.code != 0) {
+    throw new Error(result.stderr);
+  }
+  return result.stdout;
 }

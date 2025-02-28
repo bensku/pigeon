@@ -36,7 +36,12 @@ export class Host extends pulumi.ComponentResource {
   installPackage(packageName: string, opts?: pulumi.ComponentResourceOptions) {
     return this.addSetupTask(
       `package-${packageName}`,
-      (host, name) => new apt.Package(name, { host, name: packageName }, opts),
+      (host, name) =>
+        new apt.Package(
+          name,
+          { host, name: packageName, removeOnDelete: false },
+          opts,
+        ),
     );
   }
 

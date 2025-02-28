@@ -72,7 +72,7 @@ export class Network
       );
     this.ipam = new ipam.Network(
       `${name}-ipam`,
-      { ipamHost, cidr: args.ipRange },
+      { ipamHost, cidr: args.ipRange, networkId: this.networkId },
       { parent: this },
     );
 

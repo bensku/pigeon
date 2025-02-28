@@ -19,5 +19,19 @@ export class Enrollment extends pulumi.ComponentResource {
   ) {
     super('pigeon:flock:Host', name, args, opts);
     this.hostNode = args.host;
+
+    new host.FileUpload(
+      `${name}-nebula-nic-script`,
+      {
+        host: this.hostNode,
+        source: new pulumi.asset.FileAsset('scripts/nebula_nic.sh'),
+        remotePath: '/opt/pigeon/nebula_nic.sh',
+        chmod: '755',
+      },
+      {
+        parent: this,
+        dependsOn: this.hostNode,
+      },
+    );
   }
 }

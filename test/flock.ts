@@ -1,8 +1,6 @@
 import { CONNECTIONS } from './connections';
-import * as pulumi from '@pulumi/pulumi';
 import * as host from '../src/host';
 import * as flock from '../src/flock';
-import * as apt from '../src/apt';
 import * as oci from '../src/oci';
 
 export async function pulumiProgram() {
@@ -42,6 +40,16 @@ export async function pulumiProgram() {
       },
     ],
   });
+
+  const backendConf = new oci.LocalFile('backend-conf', {
+    pod: pod1,
+    source: `server {
+      location /test {
+          add_header Content-Type text/plain;
+          return 200 'success';
+      }
+  }`,
+  });
   new oci.Container('backend', {
     pod: pod1,
     name: 'backend',
@@ -50,6 +58,7 @@ export async function pulumiProgram() {
       ['TEST_VAR', 'test_str'],
       ['TEST_VAR2', 'test_str2'],
     ],
+    mounts: [[backendConf, '/etc/nginx/conf.d/default.conf']],
   });
 
   const pod2 = new oci.Pod('pod2', {
@@ -73,8 +82,8 @@ export async function pulumiProgram() {
 
   const proxyConf = new oci.LocalFile('proxy-conf', {
     pod: pod2,
-    source: new pulumi.asset.StringAsset(`server {
-    location / {
+    source: `server {
+    location /test {
         proxy_pass http://backend.pigeon.internal;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -82,7 +91,7 @@ export async function pulumiProgram() {
         proxy_set_header Host $host;
         proxy_cache_bypass $http_upgrade;
     }
-}`),
+}`,
   });
   new oci.Container('proxy', {
     pod: pod2,
@@ -94,4 +103,13 @@ export async function pulumiProgram() {
   return {};
 }
 
-export async function testInfra() {}
+export async function testInfra() {
+  // Test that proxy is working and can reach backend
+  await new Promise((resolve) => setTimeout(resolve, 3000));
+  const response = await fetch('http://test2:8080/test');
+  if (response.status !== 200) {
+    throw new Error(
+      `Expected 200 OK but got ${response.status} ${response.statusText}`,
+    );
+  }
+}

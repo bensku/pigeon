@@ -42,6 +42,34 @@ export function certManagerCmd(
   return cmd.stdout;
 }
 
+export async function certManagerCmdLocal(
+  args: CertManagerArgs,
+): Promise<string> {
+  const { execSync } = await import('child_process');
+
+  const env: Record<string, string> = {
+    MANAGER_MODE: args.mode as string,
+    MANAGER_TARGET: args.target as string,
+  };
+
+  if (args.caKey) env.CA_KEY = args.caKey as string;
+  if (args.caConfig) env.CA_CONFIG = JSON.stringify(args.caConfig);
+  if (args.caCert) env.CA_CERT = args.caCert as string;
+  if (args.hostKey) env.HOST_KEY = args.hostKey as string;
+  if (args.certConfig) env.CERT_CONFIG = JSON.stringify(args.certConfig);
+
+  try {
+    const stdout = execSync(CERT_MANAGER_BINARY, {
+      env: { ...process.env, ...env },
+      encoding: 'utf8',
+    });
+    return stdout.trim();
+  } catch (error) {
+    console.error(`Error executing cert manager: ${error}`);
+    throw error;
+  }
+}
+
 interface CertManagerArgs {
   mode: 'ca' | 'host';
   target: 'key' | 'cert';
