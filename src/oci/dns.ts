@@ -2,6 +2,7 @@ import * as pulumi from '@pulumi/pulumi';
 import * as ssh from '../ssh';
 import { Pod, PodNetwork } from './pod';
 import { containerSshActions } from './container';
+import { HOST_NAT } from './network';
 
 export interface DnsContainerArgs {
   pod: Pod;
@@ -47,6 +48,7 @@ server=8.8.8.8
 `;
 
     const configPath = pulumi.interpolate`/var/pigeon/oci-uploads/${args.pod.podName}-dnsmasq.conf`;
+    const podmanNat = args.networks.includes(HOST_NAT);
     new ssh.RunActions(
       `${name}-service`,
       {
@@ -62,7 +64,7 @@ server=8.8.8.8
             name: 'dnsmasq',
             image: 'ghcr.io/bensku/pigeon/dnsmasq', // TODO use specific tag
             podDns: '127.0.0.1',
-            networkMode: 'bridge',
+            networkMode: podmanNat ? 'bridge' : 'private',
             mounts: [[configPath, '/etc/dnsmasq.conf']],
             // This container serves as pod network, so pod's ports are its ports!
             bridgePorts: args.pod.ports,

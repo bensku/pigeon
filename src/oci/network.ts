@@ -1,5 +1,5 @@
 import * as pulumi from '@pulumi/pulumi';
-import { Pod } from './pod';
+import { Pod, PodNetwork } from './pod';
 
 export interface PodNetworkProvider<T> {
   /**
@@ -29,3 +29,19 @@ export interface PodNetworkProvider<T> {
    */
   get dnsDomain(): pulumi.Input<string>;
 }
+
+/**
+ * Host NAT network. Adding this allows the pod to communicate with outside
+ * world. Port bindings fail if this network is not present.
+ */
+export const HOST_NAT: PodNetwork<{ hostname: string }> = {
+  endpoint: {
+    hostname: 'unknown',
+  },
+  network: {
+    networkId: 'host-nat',
+    attachPod: () => undefined,
+    dnsServers: () => [],
+    dnsDomain: '',
+  },
+};

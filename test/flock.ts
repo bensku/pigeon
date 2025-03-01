@@ -65,6 +65,7 @@ export async function pulumiProgram() {
     host: host2,
     name: 'test-pod2',
     networks: [
+      oci.HOST_NAT,
       {
         network: net,
         endpoint: {

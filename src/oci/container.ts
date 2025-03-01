@@ -81,11 +81,21 @@ export interface ContainerArgs {
    * @default 'pod'
    */
   networkMode?: 'pod' | 'bridge' | 'private' | 'host';
+
+  /**
+   * Ports publish to host. Only supported in `bridge` and `private` network modes.
+   * For pod networking, set pod's ports instead!
+   */
   bridgePorts?: [
     pulumi.Input<number>,
     pulumi.Input<number>,
     ('tcp' | 'udp')?,
   ][];
+
+  /**
+   * Address of pod's DNS server. Only supported for `bridge` and `private`
+   * network modes.
+   */
   podDns?: string;
   dnsSearchDomain?: pulumi.Input<string>;
 }
@@ -143,8 +153,7 @@ export class Container extends pulumi.ComponentResource {
 
 export function containerSshActions(args: ContainerArgs): ssh.Action[] {
   const containerName = pulumi.interpolate`${args.pod.podName}-${args.name}`;
-  const networkMode = args.networkMode ?? 'pod';
-  if (args.bridgePorts && networkMode != 'bridge') {
+  if (args.bridgePorts && (!args.networkMode || args.networkMode == 'pod')) {
     throw new Error(
       'containers that use pod networking cannot use direct ports',
     );
@@ -193,14 +202,68 @@ export function containerSshActions(args: ContainerArgs): ssh.Action[] {
     ? args.linuxDevices.map((dev) => `AddDevice=${dev}`).join('\n')
     : '';
 
+  let networkMode: pulumi.Input<string>;
+  let networkSetup: ssh.Action[] = [];
+  let networkDeps: pulumi.Input<string>;
+  if (args.networkMode == 'pod' || !args.networkMode) {
+    // Default: pod network, i.e. join DNS containers network NS
+    networkMode = pulumi.interpolate`Network=${args.pod.podNetName}`;
+    networkDeps = pulumi.interpolate`Requires=${args.pod.podNetService}.service
+After=${args.pod.podNetService}.service`;
+  } else if (args.networkMode == 'host') {
+    // YOLO, use host network!
+    networkMode = 'Network=host';
+    networkDeps = '';
+  } else {
+    // Set up a new bridge network
+    // Podman doesn't allow us to create private (=no outbound access) bridges
+    // using the --network argument
+    // --network none would work... but causes --dns to fail for no good reason
+    // See https://github.com/containers/podman/discussions/22677
+    // So we'll just create the network as separate service the hard way!
+    const name = pulumi.interpolate`${args.pod.podName}-${args.name}`;
+    networkMode = pulumi.interpolate`Network=${name}.network`;
+    const netUnit = pulumi.interpolate`[Unit]
+Description=Bridge network for pod ${args.pod.podName}
+
+[Network]
+Label=pod=${args.pod.podName}
+NetworkName=${name}
+DisableDNS=true
+Driver=bridge
+Internal=${args.networkMode == 'private' ? 'true' : 'false'}
+
+[Install]
+WantedBy=multi-user.target default.target
+`;
+
+    networkDeps = pulumi.interpolate`Requires=${name}-network.service
+After=${name}-network.service`;
+
+    // Install the network as systemd service
+    networkSetup = [
+      // Removing the systemd service won't remove the network
+      // This is VERY BAD, because this prevents configuration from being updated!
+      {
+        type: 'command',
+        create: '',
+        delete: pulumi.interpolate`podman network rm ${name}`,
+      },
+      ...systemd.sshActions({
+        host: args.pod.host,
+        name: pulumi.interpolate`${args.pod.podName}-${args.name}`,
+        fileSuffix: '.network',
+        serviceSuffix: '-network',
+        unitFile: netUnit,
+        unitDir: '/etc/containers/systemd',
+        transient: true,
+      }),
+    ];
+  }
+
   const unit = pulumi.interpolate`[Unit]
 Description=Container ${args.name} in pod ${args.pod.podName}
-${
-  networkMode == 'pod'
-    ? pulumi.interpolate`Requires=${args.pod.podNetService}.service
-After=${args.pod.podNetService}.service`
-    : ''
-}
+${networkDeps}
 
 [Container]
 Label=pod=${args.pod.podName}
@@ -210,7 +273,7 @@ ${args.entrypoint ? pulumi.interpolate`Entrypoint=${args.entrypoint}\n` : ''}
 ${args.command ? pulumi.interpolate`Exec=${args.command}\n` : ''}
 
 # Pod networking
-${networkMode == 'pod' ? pulumi.interpolate`Network=${args.pod.podNetName}` : networkMode == 'host' ? 'Network=host' : ''}
+${networkMode}
 ${args.podDns ? pulumi.interpolate`DNS=${args.podDns}` : ''}
 
 # Volume mounts
@@ -238,6 +301,7 @@ WantedBy=multi-user.target default.target
 `;
 
   return [
+    ...networkSetup,
     ...systemd.sshActions({
       host: args.pod.host,
       name: pulumi.interpolate`${args.pod.podName}-${args.name}`,
