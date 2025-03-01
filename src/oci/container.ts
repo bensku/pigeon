@@ -5,17 +5,82 @@ import { Pod } from './pod';
 import { LocalFile, Volume } from './volume';
 
 export interface ContainerArgs {
+  /**
+   * Pod this container is part of.
+   */
   pod: Pod;
+
+  /**
+   * Name of the container. This MUST be unique within pod.
+   */
   name: pulumi.Input<string>;
-  image: string;
+
+  /**
+   * Identifier of container image to use. This must be fully qualified,
+   * no special treatment is given to Docker Hub.
+   *
+   * @example docker.io/nginx:latest
+   */
+  image: pulumi.Input<string>;
+
+  /**
+   * List of volume mounts for this container. Host path -> container path:
+   *
+   * Supported types of host paths are:
+   * * string: Host directory or file
+   * * Volume: Managed oci.Volume
+   * * LocalFile: oci.LocalFile (or directory) that is part of this container's pod
+   */
   mounts?: [pulumi.Input<string> | Volume | LocalFile, string][];
+
+  /**
+   * Environment variables, name -> value.
+   */
+  // TODO actually test Podman secrets!
   environment?: [pulumi.Input<string>, pulumi.Input<string | SecretRef>][];
+
+  /**
+   * Container entrypoint. If set, this replaces the image's default entrypoint.
+   */
   entrypoint?: pulumi.Input<string>;
+
+  /**
+   * Container command, i.e. the value that is passed to its entrypoint.
+   * If set, this replaces the image's default command.
+   */
   command?: pulumi.Input<string>;
+
+  /**
+   * Additional Linux capabilities to grant to the container.
+   *
+   * @example CAP_NET_ADMIN
+   */
   linuxCapabilities?: string[];
+
+  /**
+   * Additional Linux devices this container should get access to.
+   */
   linuxDevices?: string[];
 
-  networkMode?: 'pod' | 'bridge' | 'host';
+  /**
+   * Network mode for this container.
+   *
+   * Supported network modes are:
+   * * `pod`: Uses pod network, i.e. every container in pod is `localhost`
+   *   to each other. Recommended for normal usage.
+   * * `bridge`: Creates a separate bridge network for this container and
+   *   grants it outgoing access through Podman NAT.
+   * * `private`: Same as `bridge`, but without any outgoing access by default.
+   * * `host`: Uses host networking.
+   *
+   * The default, `pod` network, is usually what you want. `host` network may be
+   * useful for performance-critical containers or custom OCI network systems,
+   * but is also a potential security risk. `bridge` and `private` networks
+   * should rarely be used outside of Pigeon's networking system.
+   *
+   * @default 'pod'
+   */
+  networkMode?: 'pod' | 'bridge' | 'private' | 'host';
   bridgePorts?: [
     pulumi.Input<number>,
     pulumi.Input<number>,
@@ -29,6 +94,9 @@ interface SecretRef {
   secretName: string;
 }
 
+/**
+ * OCI container, deployed using Podman.
+ */
 export class Container extends pulumi.ComponentResource {
   readonly containerName: pulumi.Output<string>;
   readonly serviceName: pulumi.Output<string>;

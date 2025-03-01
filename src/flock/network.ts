@@ -6,13 +6,11 @@ import * as oci from '../oci';
 import { certManagerCmd } from './cert-manager';
 import { PodAttachment } from './container';
 import { Endpoint, EndpointArgs } from './endpoint';
-import { Enrollment } from './host';
-import { PodNetworkProvider } from '../oci/network';
 
 export interface NetworkArgs {
   /**
-   * Current epoch of the network. This should be periodically increased by 1
-   * to create and deploy new CAs to endpoints without downtime.
+   * Current epoch of the network. This can be increased to rotate
+   * certificates within the network.
    */
   epoch: number;
 
@@ -23,9 +21,21 @@ export interface NetworkArgs {
    */
   ipRange: string;
 
+  /**
+   * Lighthouses, i.e. hosts that provide discovery and DNS services for this
+   * network. The first lighthouse will also serve as IPAM data storage by default.
+   */
   lighthouses: { host: host.Host; underlayPort: number }[];
+
+  /**
+   * Custom IPAM host. Default is to create a new one on the first lighthouse.
+   */
   ipamHost?: ipam.IpamHost;
 
+  /**
+   * DNS domain to use for this network. Defaults to `pigeon.internal`.
+   * Endpoints in network will receive names such as `test-pod.pigeon.internal`.
+   */
   domain?: string;
 }
 
@@ -34,9 +44,13 @@ interface Lighthouse {
   overlayIp: pulumi.Output<string>;
 }
 
+/**
+ * Flock is an overlay networking tool based on [Nebula](https://github.com/slackhq/nebula).
+ * It provides encrypted communications and private DNS for OCI pods or their host machines.
+ */
 export class Network
   extends pulumi.ComponentResource
-  implements PodNetworkProvider<Omit<Omit<EndpointArgs, 'network'>, 'host'>>
+  implements oci.PodNetworkProvider<Omit<Omit<EndpointArgs, 'network'>, 'host'>>
 {
   #name: string;
   readonly networkId: pulumi.Output<string>;
@@ -48,8 +62,6 @@ export class Network
 
   #epochs: [CaCertificate, CaCertificate];
 
-  #enrolledHosts: Map<host.Host, Enrollment> = new Map();
-
   constructor(
     name: string,
     args: NetworkArgs,
@@ -60,15 +72,13 @@ export class Network
     const randomId = new random.RandomUuid(`${name}-id`, {}, { parent: this });
     this.networkId = pulumi.interpolate`${name}-${randomId.result}`;
     this.dnsDomain = pulumi.output(args.domain ?? 'pigeon.internal');
-    this.#enrolledHosts = new Map();
 
     // Initialize IPAM for this network
     const ipamHost =
       args.ipamHost ??
-      new ipam.IpamHost(
-        `${name}-ipam-host`,
-        { host: args.lighthouses[0].host },
-        { parent: this },
+      args.lighthouses[0].host.addSetupTask(
+        'ipam-host',
+        (host, name) => new ipam.IpamHost(name, { host }, { parent: this }),
       );
     this.ipam = new ipam.Network(
       `${name}-ipam`,
@@ -100,7 +110,6 @@ export class Network
         network: this,
         hostname: `lh${i}.lighthouses`,
         groups: ['lighthouses'],
-        host: this.enrollHost(host),
         firewall: {
           // Lighthouses also serve as private DNS resolvers
           inbound: [{ host: 'any', port: 53 }],
@@ -138,28 +147,6 @@ export class Network
     return { privateKey, certificate };
   }
 
-  /**
-   * Enrolls a host to this network. It is safe to call this multiple times
-   * for the same host.
-   * @param host Host.
-   * @returns Enrollment information.
-   */
-  enrollHost(host: host.Host): Enrollment {
-    if (this.#enrolledHosts.has(host)) {
-      return this.#enrolledHosts.get(host)!;
-    }
-    const enrollment = new Enrollment(
-      `${this.#name}-host-${host.name}`,
-      {
-        host: host,
-        network: this,
-      },
-      { parent: this },
-    );
-    this.#enrolledHosts.set(host, enrollment);
-    return enrollment;
-  }
-
   get currentCa() {
     return this.#epochs[1];
   }
@@ -176,7 +163,6 @@ export class Network
   ): PodAttachment {
     const endpoint = new Endpoint(`${this.#name}-endpoint-${pod.name}`, {
       ...args,
-      host: this.enrollHost(pod.host),
       network: this,
     });
     return new PodAttachment(`${this.#name}-attach-${pod.name}`, {

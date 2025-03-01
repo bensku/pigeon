@@ -43,7 +43,7 @@ export function sshActions(args: ServiceArgs): ssh.Action[] {
   const actions: ssh.Action[] = [
     {
       type: 'upload',
-      data: args.unitFile,
+      source: args.unitFile,
       remotePath: pulumi.interpolate`${args.unitDir ?? '/etc/systemd/system/'}/${args.name}${args.fileSuffix ?? '.service'}`,
     },
   ];

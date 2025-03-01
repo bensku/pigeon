@@ -45,74 +45,16 @@ export class Host extends pulumi.ComponentResource {
     );
   }
 
-  addSetupTask(
+  addSetupTask<T extends pulumi.Resource>(
     name: string,
-    callback: (host: Host, name: string) => pulumi.Resource,
-  ) {
+    callback: (host: Host, name: string) => T,
+  ): T {
     const taskName = `${this.name}-${name}`;
     let task = this.#existingTasks.get(taskName);
     if (!task) {
       task = callback(this, taskName);
       this.#existingTasks.set(taskName, task);
     }
-    return task;
-  }
-}
-
-export interface FileUploadArgs {
-  host: Host;
-  source: pulumi.Input<pulumi.asset.Asset>;
-  remotePath: pulumi.Input<string>;
-
-  chmod?: string;
-}
-
-export class FileUpload extends pulumi.ComponentResource {
-  constructor(
-    name: string,
-    args: FileUploadArgs,
-    opts?: pulumi.ComponentResourceOptions,
-  ) {
-    super('pigeon:host:FileUpload', name, args, opts);
-
-    const upload = new command.remote.CopyToRemote(
-      name,
-      {
-        connection: args.host.connection,
-        source: pulumi.output(args.source).apply(async (asset) => {
-          if ('path' in asset) {
-            return asset;
-          } else if ('text' in asset) {
-            // CopyToRemote doesn't support StringAsset, so make a temporary file for a FileAsset
-            const tmpPath = `/tmp/${name}`;
-            // @ts-ignore instanceof checks are not working :/
-            await fs.writeFile(tmpPath, await asset.text);
-            return new pulumi.asset.FileAsset(tmpPath);
-          }
-          throw new Error(`unsupported asset type: ${asset.constructor.name}`);
-        }),
-        remotePath: args.remotePath,
-      },
-      { parent: this },
-    );
-    if (args.chmod) {
-      new command.remote.Command(
-        `${name}-chmod`,
-        {
-          connection: args.host.connection,
-          create: pulumi.interpolate`chmod ${args.chmod} "${args.remotePath}"`,
-        },
-        { parent: this, dependsOn: upload },
-      );
-    }
-
-    new command.remote.Command(
-      `${name}-cleanup`,
-      {
-        connection: args.host.connection,
-        delete: pulumi.interpolate`rm "${upload.remotePath}"`,
-      },
-      { parent: this, dependsOn: upload },
-    );
+    return task as T;
   }
 }

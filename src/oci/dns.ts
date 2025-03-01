@@ -54,7 +54,7 @@ server=8.8.8.8
         actions: [
           {
             type: 'upload',
-            data: config,
+            source: config,
             remotePath: configPath,
           },
           ...containerSshActions({

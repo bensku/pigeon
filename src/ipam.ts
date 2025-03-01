@@ -2,6 +2,7 @@ import * as pulumi from '@pulumi/pulumi';
 import * as command from '@pulumi/command';
 import * as random from '@pulumi/random';
 import * as host from './host';
+import * as ssh from './ssh';
 import { connectSSH } from './ssh';
 
 interface IpamHostArgs {
@@ -19,25 +20,25 @@ export class IpamHost extends pulumi.ComponentResource {
     super('pigeon:ipam:IpamHost', name, args, opts);
     this.connection = args.host.connection;
 
-    // Install mini-ipam on machine
-    const copy = new host.FileUpload(
-      `${name}-copy`,
+    // Install mini-ipam on target machine
+    new ssh.RunActions(
+      `${name}-setup`,
       {
-        host: args.host,
-        source: new pulumi.asset.FileAsset('mini-ipam/mini-ipam'),
-        remotePath: '/opt/pigeon/mini-ipam',
+        connection: args.host.connection,
+        actions: [
+          {
+            type: 'upload',
+            source: { localPath: 'mini-ipam/mini-ipam' },
+            remotePath: '/opt/pigeon/mini-ipam',
+          },
+          {
+            type: 'command',
+            create:
+              'chmod +x /opt/pigeon/mini-ipam && mkdir -p /etc/pigeon/ipam',
+          },
+        ],
       },
-      { parent: this, dependsOn: args.host },
-    );
-
-    // Make the executable executable and create config dir if needed
-    new command.remote.Command(
-      `${name}-commands`,
-      {
-        connection: this.connection,
-        create: 'chmod +x /opt/pigeon/mini-ipam && mkdir -p /etc/pigeon/ipam',
-      },
-      { parent: this, dependsOn: copy },
+      { parent: this, dependsOn: args.host, deleteBeforeReplace: true },
     );
   }
 

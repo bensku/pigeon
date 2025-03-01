@@ -10,9 +10,11 @@ export interface CommandAction {
   delete?: pulumi.Input<string>;
 }
 
+export type UploadSource = string | { localPath: string; recursive?: boolean };
+
 export interface UploadAction {
   type: 'upload';
-  data: pulumi.Input<string>;
+  source: pulumi.Input<UploadSource>;
   remotePath: pulumi.Input<string>;
 }
 
@@ -28,7 +30,7 @@ interface SshProviderArgs {
   triggers?: any[];
 }
 
-class SshProvider implements pulumi.dynamic.ResourceProvider {
+export class SshProvider implements pulumi.dynamic.ResourceProvider {
   async create(inputs: SshProviderArgs): Promise<pulumi.dynamic.CreateResult> {
     const { connection, actions } = inputs;
 
@@ -127,13 +129,24 @@ async function runCreateAction(
       }
       break;
     case 'upload':
-      // Write to temporary file
-      const tmpPath = `/tmp/${crypto.randomUUID()}`;
-      try {
-        await fs.writeFile(tmpPath, action.data);
-        await ssh.putFile(tmpPath, action.remotePath);
-      } finally {
-        await fs.unlink(tmpPath); // TODO cleanup if we somehow crash before this
+      if (typeof action.source === 'string') {
+        // Create a temporary local file, then upload it
+        const tmpPath = `/tmp/${crypto.randomUUID()}`;
+        try {
+          await fs.writeFile(tmpPath, action.source, { mode: 0o600 });
+          await ssh.putFile(tmpPath, action.remotePath);
+        } finally {
+          await fs.unlink(tmpPath); // TODO cleanup if we somehow crash before this
+        }
+      } else {
+        // Put existing file or directory
+        if (action.source.recursive) {
+          await ssh.putDirectory(action.source.localPath, action.remotePath, {
+            recursive: true,
+          });
+        } else {
+          await ssh.putFile(action.source.localPath, action.remotePath, null);
+        }
       }
       break;
   }
@@ -162,7 +175,9 @@ async function runDeleteAction(
       break;
     case 'upload':
       // For uploads, if no deleteCommand is provided, default to deleting the remote file.
-      await ssh.execCommand(`rm -f ${action.remotePath}`);
+      await ssh.execCommand(
+        `rm -r${typeof action.source != 'string' && action.source.recursive ? 'f' : ''} ${action.remotePath}`,
+      );
       break;
   }
 }

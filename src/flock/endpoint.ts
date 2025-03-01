@@ -1,9 +1,6 @@
 import * as pulumi from '@pulumi/pulumi';
-import * as ipam from '../ipam';
 import * as oci from '../oci';
-import { Enrollment } from './host';
 import { Network } from './network';
-import { certManagerCmd } from './cert-manager';
 import { PodAttachment } from './container';
 import { EndpointProvider } from './endpoint-provider';
 
@@ -14,14 +11,9 @@ export interface EndpointArgs {
   network: Network;
 
   /**
-   * Host that the endpoint will work on. This is needed for setting up
-   * underlay communications.
-   */
-  host: Enrollment;
-
-  /**
-   * Hostname for this particular endpoint. This is in no way related to the
-   * actual host it is running on.
+   * Hostname for this particular endpoint within *overlay* network.
+   * This is in no way related to pod's host's hostname in the
+   * *underlay* network.
    */
   hostname: pulumi.Input<string>;
 
@@ -109,7 +101,7 @@ export class Endpoint extends pulumi.dynamic.Resource {
   declare readonly privateKey: pulumi.Output<string>;
 
   /**
-   * Certificate of this endpoint.
+   * Nebula certificate of this endpoint.
    */
   declare readonly certificate: pulumi.Output<string>;
 
@@ -142,11 +134,10 @@ export class Endpoint extends pulumi.dynamic.Resource {
         privateKey: undefined,
         certificate: undefined,
       },
-      {
-        ...opts,
-        // TODO do not break custom dependsOn
-        dependsOn: [args.network],
-      },
+      pulumi.mergeOptions(opts, {
+        dependsOn: args.network,
+        additionalSecretOutputs: ['privateKey'],
+      }),
     );
     this.#name = name;
     this.network = args.network;

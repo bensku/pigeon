@@ -39,6 +39,31 @@ export class PodAttachment extends pulumi.ComponentResource {
       underlayPort: this.underlayPort,
     });
 
+    // Do host-specific setup - once per host
+    const hostSetup = args.pod.host.addSetupTask(
+      'flock-pod-utils',
+      (host, name) =>
+        new ssh.RunActions(
+          name,
+          {
+            connection: host.connection,
+            actions: [
+              {
+                type: 'upload',
+                source: { localPath: 'scripts/nebula_nic.sh' },
+                remotePath: '/opt/pigeon/nebula_nic.sh',
+              },
+              {
+                type: 'command',
+                create: 'chmod +x /opt/pigeon/nebula_nic.sh',
+              },
+            ],
+          },
+          { dependsOn: host, deleteBeforeReplace: true },
+        ),
+    );
+
+    // Deploy networking as a set of systemd services
     const containerName = pulumi.interpolate`nebula-${args.endpoint.network.networkId}`;
     const fullName = pulumi.interpolate`${args.pod.podName}-${containerName}`;
     const nebulaConfigPath = pulumi.interpolate`/var/pigeon/oci-uploads/${fullName}.json`;
@@ -50,7 +75,7 @@ export class PodAttachment extends pulumi.ComponentResource {
           // Copy Nebula config to host
           {
             type: 'upload',
-            data: nebulaConfig.apply((cfg) => stringify(cfg)!),
+            source: nebulaConfig.apply((cfg) => stringify(cfg)!),
             remotePath: nebulaConfigPath,
           },
           // Launch Nebula container in pod, but with host network!
@@ -78,7 +103,7 @@ export class PodAttachment extends pulumi.ComponentResource {
               })),
         ],
       },
-      { parent: this, deleteBeforeReplace: true },
+      { parent: this, dependsOn: hostSetup, deleteBeforeReplace: true },
     );
   }
 }

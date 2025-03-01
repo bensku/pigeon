@@ -57,11 +57,11 @@ export interface LocalFileArgs {
    * Source for the file. Can be a local file or in-memory asset.
    * The content will be uploaded to a temporary location.
    */
-  source: pulumi.Input<string>;
+  source: pulumi.Input<ssh.UploadSource>;
 }
 
 export class LocalFile extends pulumi.ComponentResource {
-  readonly source: pulumi.Input<string>;
+  readonly source: pulumi.Input<ssh.UploadSource>;
   readonly filePath: pulumi.Output<string>;
 
   constructor(
@@ -69,7 +69,7 @@ export class LocalFile extends pulumi.ComponentResource {
     args: LocalFileArgs,
     opts?: pulumi.ComponentResourceOptions,
   ) {
-    super('pigeon:oci:MountedFile', name, args, opts);
+    super('pigeon:oci:LocalFile', name, args, opts);
     this.source = args.source;
 
     const id = new random.RandomUuid(`${name}-id`, {}, { parent: this });
@@ -82,7 +82,7 @@ export class LocalFile extends pulumi.ComponentResource {
         actions: [
           {
             type: 'upload',
-            data: this.source,
+            source: this.source,
             remotePath: this.filePath,
           },
         ],

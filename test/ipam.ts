@@ -12,6 +12,7 @@ export async function pulumiProgram() {
 
   const network = new ipam.Network('net', {
     ipamHost,
+    networkId: 'net1',
     cidr: '10.0.1.0/24',
   });
   const ip1 = new ipam.IpAddress('ip1', { network });
