@@ -29,7 +29,7 @@ export async function pulumiProgram() {
     networks: [
       {
         network: net,
-        endpoint: {
+        config: {
           hostname: 'backend',
           groups: ['test-app'],
           firewall: {
@@ -68,7 +68,7 @@ export async function pulumiProgram() {
       oci.HOST_NAT,
       {
         network: net,
-        endpoint: {
+        config: {
           hostname: 'proxy',
           groups: ['test-app'],
           firewall: {

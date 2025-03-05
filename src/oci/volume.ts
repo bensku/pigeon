@@ -7,7 +7,7 @@ import { Pod } from './pod';
 
 export interface VolumeArgs {
   pod: Pod;
-  name: string;
+  name: pulumi.Input<string>;
 }
 
 export class Volume extends pulumi.ComponentResource {

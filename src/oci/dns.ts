@@ -24,7 +24,7 @@ interface=lo
 no-dhcp-interface=lo
 
 # This pods names -> loopback
-${pulumi.concat(...args.networks.map((network) => pulumi.interpolate`address=/${network.endpoint.hostname}.${network.network.dnsDomain}/127.0.0.1\n`))}
+${pulumi.concat(...args.networks.map((network) => pulumi.interpolate`address=/${network.config.hostname}.${network.network.dnsDomain}/127.0.0.1\n`))}
 
 # DNS servers for pod networks
 ${pulumi.concat(

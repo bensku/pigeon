@@ -10,8 +10,9 @@ export interface PodNetworkProvider<T> {
   /**
    * Attachs a pod to this network.
    * @param pod Pod to attach.
+   * @returns Pod attachment.
    */
-  attachPod(pod: Pod, args: T): void;
+  attachPod(pod: Pod, args: T): PodAttachment;
 
   /**
    * Gets DNS servers of this network for the given pod. Not all pods need to
@@ -30,17 +31,21 @@ export interface PodNetworkProvider<T> {
   get dnsDomain(): pulumi.Input<string>;
 }
 
+export interface PodAttachment {
+  get ipAddress(): pulumi.Input<string>;
+}
+
 /**
  * Host NAT network. Adding this allows the pod to communicate with outside
  * world. Port bindings fail if this network is not present.
  */
 export const HOST_NAT: PodNetwork<{ hostname: string }> = {
-  endpoint: {
+  config: {
     hostname: 'unknown',
   },
   network: {
     networkId: 'host-nat',
-    attachPod: () => undefined,
+    attachPod: () => ({ ipAddress: 'unknown' }),
     dnsServers: () => [],
     dnsDomain: '',
   },

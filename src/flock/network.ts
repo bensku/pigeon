@@ -39,6 +39,8 @@ export interface NetworkArgs {
   domain?: string;
 }
 
+export type PodConfig = Omit<Omit<EndpointArgs, 'network'>, 'host'>;
+
 interface Lighthouse {
   underlayAddress: pulumi.Output<string>;
   overlayIp: pulumi.Output<string>;
@@ -50,7 +52,7 @@ interface Lighthouse {
  */
 export class Network
   extends pulumi.ComponentResource
-  implements oci.PodNetworkProvider<Omit<Omit<EndpointArgs, 'network'>, 'host'>>
+  implements oci.PodNetworkProvider<PodConfig>
 {
   #name: string;
   readonly networkId: pulumi.Output<string>;

@@ -21,7 +21,10 @@ export interface PodAttachmentArgs {
   underlayPort?: pulumi.Output<number>;
 }
 
-export class PodAttachment extends pulumi.ComponentResource {
+export class PodAttachment
+  extends pulumi.ComponentResource
+  implements oci.PodAttachment
+{
   readonly endpoint: Endpoint;
   readonly underlayPort: pulumi.Output<number>;
 
@@ -105,6 +108,10 @@ export class PodAttachment extends pulumi.ComponentResource {
       },
       { parent: this, dependsOn: hostSetup, deleteBeforeReplace: true },
     );
+  }
+
+  get ipAddress(): pulumi.Output<string> {
+    return this.endpoint.overlayIp;
   }
 }
 

@@ -5,16 +5,20 @@ import { Container } from './container';
 import { PodNetworkProvider } from './network';
 import { DnsContainer } from './dns';
 
-export interface PodNetwork<T extends { hostname: pulumi.Input<string> }> {
+interface NetworkConfig {
+  hostname: pulumi.Input<string>;
+}
+
+export interface PodNetwork<T extends NetworkConfig = any> {
   network: PodNetworkProvider<T>;
-  endpoint: T;
+  config: T;
 }
 
 export interface PodArgs {
   host: host.Host;
 
-  name: string;
-  networks?: PodNetwork<any>[];
+  name: pulumi.Input<string>;
+  networks?: PodNetwork[];
   ports?: [pulumi.Input<number>, pulumi.Input<number>, ('tcp' | 'udp')?][];
 }
 
@@ -32,6 +36,7 @@ export class Pod extends pulumi.ComponentResource {
   readonly podNetService: pulumi.Output<string>;
 
   readonly containers: Container[] = [];
+  readonly ipAddresses: pulumi.Output<string>[];
 
   constructor(
     name: string,
@@ -63,8 +68,10 @@ export class Pod extends pulumi.ComponentResource {
     this.podNetService = dns.serviceName;
 
     // Attach networks to pod
+    this.ipAddresses = [];
     for (const network of args.networks ?? []) {
-      network.network.attachPod(this, network.endpoint);
+      const attachment = network.network.attachPod(this, network.config);
+      this.ipAddresses.push(pulumi.output(attachment.ipAddress));
     }
   }
 }
