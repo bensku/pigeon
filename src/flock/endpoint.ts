@@ -65,7 +65,8 @@ interface HostFirewallRule extends BaseFirewallRule {
 
 interface GroupFirewallRule extends BaseFirewallRule {
   /**
-   * List of groups whose endpoints should be allowed.
+   * List of groups which allow access to this endpoint.
+   * An endpoint trying to access this must have ALL of these groups!
    */
   groups: string[];
 }

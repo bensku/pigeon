@@ -20,7 +20,7 @@ async function runTest(target: string) {
   if (app.testInfra) {
     await app.testInfra();
   }
-  await stack.destroy({ onOutput: console.info });
+  // await stack.destroy({ onOutput: console.info });
 }
 
 runTest(process.argv[2]);

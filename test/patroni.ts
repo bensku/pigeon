@@ -2,6 +2,7 @@ import { CONNECTIONS } from './connections';
 import * as host from '../src/host';
 import * as flock from '../src/flock';
 import * as etcd from '../src/etcd';
+import * as patroni from '../src/patroni';
 
 export async function pulumiProgram() {
   const host1 = new host.Host('host1', {
@@ -23,10 +24,17 @@ export async function pulumiProgram() {
     ],
   });
 
-  new etcd.Cluster('test-etcd', {
+  const etcdCluster = new etcd.Cluster('test-etcd', {
     hosts: [host1, host2, host3],
     network: net,
-    clientGroups: ['test-etcd'],
+    clientGroups: ['postgres'],
+  });
+
+  new patroni.Cluster('test-patroni', {
+    hosts: [host1, host2],
+    network: net,
+    etcd: etcdCluster,
+    clientGroups: ['postgres-client'],
   });
 
   return {};

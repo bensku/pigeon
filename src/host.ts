@@ -17,7 +17,7 @@ export class Host extends pulumi.ComponentResource {
     args: HostArgs,
     opts?: pulumi.ComponentResourceOptions,
   ) {
-    super('pigeon:host:Host', name, {}, opts);
+    super('pigeon:host:Host', name, args, opts);
     this.name = name;
     this.connection = args.connection;
 

@@ -27,7 +27,7 @@ interface EtcdClusterArgs {
 /**
  * A highly available [etcd](https://etcd.io/) cluster.
  */
-export class EtcdCluster extends pulumi.ComponentResource {
+export class Cluster extends pulumi.ComponentResource {
   /**
    * Etcd endpoints of this cluster. For high availability, configure your
    * application to use ALL of these endpoints.
@@ -39,7 +39,7 @@ export class EtcdCluster extends pulumi.ComponentResource {
     args: EtcdClusterArgs,
     opts?: pulumi.ComponentResourceOptions,
   ) {
-    super('pigeon:apps:EtcdCluster', name, args, opts);
+    super('pigeon:etcd:EtcdCluster', name, args, opts);
 
     const clusterId = new random.RandomUuid(`${name}-id`, {}, { parent: this });
 
@@ -58,9 +58,7 @@ export class EtcdCluster extends pulumi.ComponentResource {
     const fqdns = endpointNames.map(
       (name) => pulumi.interpolate`${name}.${args.network.dnsDomain}`,
     );
-    this.etcdEndpoints = fqdns.map(
-      (name) => pulumi.interpolate`http://${name}:2379`,
-    );
+    this.etcdEndpoints = fqdns.map((name) => pulumi.interpolate`${name}:2379`);
 
     // Create initial cluster configuration for etcd bootstrapping
     const nodeNames = args.hosts.map((h) => pulumi.interpolate`node-${h.name}`);
@@ -114,7 +112,7 @@ export class EtcdCluster extends pulumi.ComponentResource {
         mounts: [[data, '/etcd-data']],
         command: pulumi.interpolate`/usr/local/bin/etcd --data-dir /etcd-data --name ${nodeNames[i]} \
 --initial-advertise-peer-urls http://${fqdns[i]}:2380 --listen-peer-urls http://0.0.0.0:2380 \
---advertise-client-urls ${this.etcdEndpoints[i]} --listen-client-urls http://0.0.0.0:2379 \
+--advertise-client-urls http://${this.etcdEndpoints[i]} --listen-client-urls http://0.0.0.0:2379 \
 --initial-cluster ${initialCluster} \
 --initial-cluster-state new --initial-cluster-token ${clusterId.id}`,
       });
