@@ -106,7 +106,11 @@ export class PodAttachment
               })),
         ],
       },
-      { parent: this, dependsOn: hostSetup, deleteBeforeReplace: true },
+      {
+        parent: this,
+        dependsOn: [hostSetup, args.pod],
+        deleteBeforeReplace: true,
+      },
     );
   }
 
